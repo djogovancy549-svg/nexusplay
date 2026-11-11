@@ -33,6 +33,51 @@ function doPost(e) {
     var data = JSON.parse(rawData);
 
     // ==========================================
+    // ACTION: REGISTER CUSTOMER EMAIL IN GOOGLE SHEET
+    // ==========================================
+    if (data.action === "REGISTER_USER" || data.user) {
+      var user = data.user || data;
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var userSheetName = "NexusRegisteredUsers";
+      var userSheet = ss.getSheetByName(userSheetName);
+
+      if (!userSheet) {
+        userSheet = ss.insertSheet(userSheetName);
+        var userHeaders = ["Email Customer", "Nama Customer", "Waktu Pendaftaran", "Status Akun"];
+        userSheet.appendRow(userHeaders);
+
+        var uHeaderRange = userSheet.getRange(1, 1, 1, userHeaders.length);
+        uHeaderRange.setBackground("#34a853");
+        uHeaderRange.setFontColor("#ffffff");
+        uHeaderRange.setFontWeight("bold");
+        userSheet.setFrozenRows(1);
+      }
+
+      var uValues = userSheet.getDataRange().getValues();
+      var foundUser = false;
+      for (var u = 1; u < uValues.length; u++) {
+        if (String(uValues[u][0]).toLowerCase() === String(user.email).toLowerCase()) {
+          foundUser = true;
+          break;
+        }
+      }
+
+      if (!foundUser) {
+        userSheet.appendRow([
+          user.email || "customer@nexus.app",
+          user.name || "Customer Registered",
+          user.registeredAt || new Date().toISOString(),
+          "ACTIVE_CUSTOMER"
+        ]);
+      }
+
+      return createJsonResponse({
+        status: "success",
+        message: "Email pelanggan " + user.email + " telah terdaftar di sistem Google Sheet!"
+      }, 200);
+    }
+
+    // ==========================================
     // ACTION: DELETE APP ROW FROM GOOGLE SHEET
     // ==========================================
     if (data.action === "DELETE" || (data.appData && data.appData.action === "DELETE")) {

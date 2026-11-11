@@ -1,5 +1,6 @@
 import React from 'react';
-import { Store, ShieldCheck, Cloud, Upload, Package, Search, Sun, Moon, UserCheck, Lock } from 'lucide-react';
+import { Store, Cloud, Package, Search, Sun, Moon, UserCheck, Lock, Mail, LogOut, CheckCircle2 } from 'lucide-react';
+import { CustomerUser } from '../services/googleService';
 
 interface NavbarProps {
   searchQuery: string;
@@ -11,6 +12,9 @@ interface NavbarProps {
   setDarkMode: (dark: boolean) => void;
   activeMode: 'store' | 'developer';
   onSwitchMode: (mode: 'store' | 'developer') => void;
+  currentUser: CustomerUser | null;
+  onOpenAuthModal: () => void;
+  onLogout: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,7 +26,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   darkMode,
   setDarkMode,
   activeMode,
-  onSwitchMode
+  onSwitchMode,
+  currentUser,
+  onOpenAuthModal,
+  onLogout
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
@@ -56,8 +63,36 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         )}
 
-        {/* Zone 3: Actions & Mode Switcher */}
+        {/* Zone 3: Customer Email, Actions & Mode Switcher */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Customer Email Registration / Profile Button */}
+          {currentUser ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <div className="flex flex-col text-left max-w-[130px] sm:max-w-[180px] truncate">
+                <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">{currentUser.email}</span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">Terdaftar Google Sheet</span>
+              </div>
+              <button
+                onClick={onLogout}
+                className="p-1 text-slate-400 hover:text-rose-500 rounded-lg transition-colors ml-1"
+                title="Keluar / Ganti Email"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuthModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl shadow-md shadow-blue-500/20 transition-all shrink-0"
+              title="Daftarkan Email Pelanggan untuk Akses Google Sheet"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Daftar Email</span>
+              <span className="sm:hidden">Daftar</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenSyncPanel}
             className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 rounded-lg border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
@@ -115,3 +150,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

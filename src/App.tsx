@@ -14,6 +14,7 @@ import { GoogleSyncPanel } from './components/GoogleSyncPanel';
 import { InstalledAppsModal } from './components/InstalledAppsModal';
 import { DeveloperConsole } from './components/DeveloperConsole';
 import { ApkInstallGuideModal } from './components/ApkInstallGuideModal';
+import { CustomerAuthModal } from './components/CustomerAuthModal';
 import { AppItem, AppCategory } from './types';
 import {
   getStoredApps,
@@ -26,7 +27,10 @@ import {
   publishAppToServer,
   updateAppOnServer,
   deleteAppFromServer,
-  getDeveloperPin
+  getDeveloperPin,
+  getStoredCustomerUser,
+  clearStoredCustomerUser,
+  CustomerUser
 } from './services/googleService';
 import { Store, Database, ShieldAlert, ShieldCheck, Lock, X, UserCheck } from 'lucide-react';
 
@@ -40,6 +44,10 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [activeMode, setActiveMode] = useState<'store' | 'developer'>('store');
   const [securityNotice, setSecurityNotice] = useState<string | null>(null);
+
+  // Customer User Authentication State
+  const [currentUser, setCurrentUser] = useState<CustomerUser | null>(getStoredCustomerUser());
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Modals
   const [selectedApp, setSelectedApp] = useState<AppItem | null>(null);
@@ -221,6 +229,12 @@ export default function App() {
     }
   };
 
+  const handleLogoutUser = () => {
+    clearStoredCustomerUser();
+    setCurrentUser(null);
+    triggerSecurityWarning('Akun pelanggan berhasil keluar.');
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors selection:bg-blue-600 selection:text-white select-none">
       {/* Cybersecurity Toast Notification */}
@@ -242,6 +256,9 @@ export default function App() {
         setDarkMode={setDarkMode}
         activeMode={activeMode}
         onSwitchMode={handleSwitchMode}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setShowAuthModal(true)}
+        onLogout={handleLogoutUser}
       />
 
       {/* Main Container */}
@@ -472,6 +489,20 @@ export default function App() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Customer Registration & Sign-in Modal */}
+      {showAuthModal && (
+        <CustomerAuthModal
+          onClose={() => setShowAuthModal(false)}
+          onSuccess={(user) => {
+            setCurrentUser(user);
+            triggerSecurityWarning(`Selamat datang ${user.email}! Account registered in Google Sheet.`);
+            fetchPublicAppsFromServer().then(sharedApps => {
+              if (sharedApps && sharedApps.length > 0) setApps(sharedApps);
+            });
+          }}
+        />
       )}
 
       {/* APK Installation Guide for Laptop / PC / Mobile */}

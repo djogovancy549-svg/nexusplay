@@ -2,5 +2,7 @@
   "name": "Nexus Play Store - APK & AAB Hub",
   "description": "Production-grade Android App Store supporting APK/AAB uploads, security inspection, and Google Sheet & Google Drive synchronization.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

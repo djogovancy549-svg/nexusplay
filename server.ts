@@ -8,6 +8,7 @@ import { createServer as createViteServer } from 'vite';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APPS_FILE = path.join(__dirname, 'data', 'apps.json');
 const CONFIG_FILE = path.join(__dirname, 'data', 'google_config.json');
+const USERS_FILE = path.join(__dirname, 'data', 'users.json');
 const UPLOADS_DIR = path.join(__dirname, 'uploads', 'icons');
 
 // Default Google Configuration embedded directly in code
@@ -45,6 +46,27 @@ function saveServerConfig(config: any): void {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
   } catch (err) {
     console.error('Failed to write server google_config.json:', err);
+  }
+}
+
+function loadServerUsers(): any[] {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const content = fs.readFileSync(USERS_FILE, 'utf-8');
+      const parsed = JSON.parse(content || '[]');
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.error('Failed to read server users.json:', err);
+  }
+  return [];
+}
+
+function saveServerUsers(users: any[]): void {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to write server users.json:', err);
   }
 }
 
@@ -262,6 +284,99 @@ async function startServer() {
   });
 
   // ==========================================
+  // CUSTOMER AUTHENTICATION & REGISTRATION ENDPOINTS
+  // ==========================================
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const { email, name } = req.body;
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ error: 'Email tidak valid' });
+      }
+
+      const users = loadServerUsers();
+      const existing = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      const userData = {
+        email: email.trim().toLowerCase(),
+        name: name ? name.trim() : email.split('@')[0],
+        role: 'customer',
+        registeredAt: new Date().toISOString()
+      };
+
+      if (!existing) {
+        users.push(userData);
+        saveServerUsers(users);
+
+        // Async sync registered customer email to Google Sheet Webhook!
+        const currentConfig = loadServerConfig();
+        if (currentConfig.WEBHOOK_URL) {
+          fetch(currentConfig.WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'REGISTER_USER',
+              user: userData
+            }),
+            signal: AbortSignal.timeout(5000)
+          }).catch(err => console.warn('Register user webhook sync note:', err));
+        }
+      }
+
+      res.json({ success: true, message: 'Email pelanggan berhasil terdaftar di sistem!', user: existing || userData });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ error: 'Email tidak valid' });
+      }
+
+      const users = loadServerUsers();
+      let user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+
+      if (!user) {
+        user = {
+          email: email.trim().toLowerCase(),
+          name: email.split('@')[0],
+          role: 'customer',
+          registeredAt: new Date().toISOString()
+        };
+        users.push(user);
+        saveServerUsers(users);
+
+        const currentConfig = loadServerConfig();
+        if (currentConfig.WEBHOOK_URL) {
+          fetch(currentConfig.WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'REGISTER_USER',
+              user: user
+            }),
+            signal: AbortSignal.timeout(5000)
+          }).catch(err => console.warn('Login register user webhook sync note:', err));
+        }
+      }
+
+      res.json({ success: true, user });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/auth/users', (req, res) => {
+    try {
+      const users = loadServerUsers();
+      res.json({ success: true, count: users.length, users });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==========================================
   // SHARED GOOGLE CONFIGURATION ENDPOINTS (Applies to all devices & emails)
   // ==========================================
   app.get('/api/config', (req, res) => {
@@ -296,12 +411,12 @@ async function startServer() {
   // ==========================================
   app.get('/api/apps', async (req, res) => {
     try {
-      const localApps = loadServerApps();
+      let localApps = loadServerApps();
       
-      // Server-side remote sync with Google Sheet as single source of truth
+      // Server-side remote sync with Google Sheet
       const remoteSync = await syncRemoteAppsServerSide();
-      if (remoteSync.sheetSynced) {
-        // Sheet was queried successfully! Update localApps to reflect the sheet exactly (including row deletions)
+      if (remoteSync.sheetSynced && remoteSync.apps.length > 0) {
+        // Sheet was queried successfully and contains rows!
         const syncedApps = remoteSync.apps.map(remoteApp => {
           const match = localApps.find(l => l.id === remoteApp.id || l.packageName === remoteApp.packageName);
           if (match && match.iconUrl && match.iconUrl.startsWith('/uploads/')) {
@@ -310,11 +425,18 @@ async function startServer() {
           return remoteApp;
         });
 
-        // Save updated list so deleted sheet rows are purged from disk as well
+        // Merge local published apps if any exist that haven't been synced to sheet yet
+        localApps.forEach(l => {
+          if (!syncedApps.some(s => s.id === l.id || s.packageName === l.packageName)) {
+            syncedApps.push(l);
+          }
+        });
+
         saveServerApps(syncedApps);
         return res.json({ success: true, count: syncedApps.length, apps: syncedApps });
       }
 
+      // If Google Sheet has 0 rows or is syncing, return local catalog apps
       res.json({ success: true, count: localApps.length, apps: localApps });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

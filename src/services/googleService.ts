@@ -403,3 +403,91 @@ export async function syncToGoogleSheetAndDrive(app: AppItem): Promise<boolean> 
     return false;
   }
 }
+
+const STORAGE_KEY_USER = 'nexus_playstore_customer_user_v1';
+
+export interface CustomerUser {
+  email: string;
+  name: string;
+  role: string;
+  registeredAt?: string;
+}
+
+export const getStoredCustomerUser = (): CustomerUser | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_USER);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const saveStoredCustomerUser = (user: CustomerUser): void => {
+  try {
+    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+  } catch (e) {}
+};
+
+export const clearStoredCustomerUser = (): void => {
+  try {
+    localStorage.removeItem(STORAGE_KEY_USER);
+  } catch (e) {}
+};
+
+export const registerCustomerEmail = async (email: string, name?: string): Promise<CustomerUser | null> => {
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.user) {
+        saveStoredCustomerUser(data.user);
+        addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Pelanggan ${email} berhasil terdaftar di Google Sheet & Server!`);
+        return data.user;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to register customer email:', e);
+  }
+  return null;
+};
+
+export const loginCustomerEmail = async (email: string): Promise<CustomerUser | null> => {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.user) {
+        saveStoredCustomerUser(data.user);
+        addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Pelanggan ${email} berhasil masuk ke Nexus Play Store.`);
+        return data.user;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to login customer email:', e);
+  }
+  return null;
+};
+
+export const getRegisteredUsersFromServer = async (): Promise<CustomerUser[]> => {
+  try {
+    const res = await fetch('/api/auth/users');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.users && Array.isArray(data.users)) {
+        return data.users;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to fetch users:', e);
+  }
+  return [];
+};
+
