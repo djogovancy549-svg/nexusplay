@@ -118,10 +118,15 @@ export const getStoredApps = (): AppItem[] => {
 
     const raw = localStorage.getItem(STORAGE_KEY_APPS);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY_APPS, JSON.stringify([]));
-      return [];
+      localStorage.setItem(STORAGE_KEY_APPS, JSON.stringify(INITIAL_APPS));
+      return INITIAL_APPS;
     }
     const parsed: AppItem[] = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      localStorage.setItem(STORAGE_KEY_APPS, JSON.stringify(INITIAL_APPS));
+      return INITIAL_APPS;
+    }
+
     let changed = false;
     const sanitized = parsed.map((app) => {
       if (!app.iconUrl || app.iconUrl.trim() === '' || app.iconUrl.includes('broken')) {
@@ -139,7 +144,7 @@ export const getStoredApps = (): AppItem[] => {
     return sanitized;
   } catch (e) {
     console.error('Failed to load stored apps:', e);
-    return [];
+    return INITIAL_APPS;
   }
 };
 
