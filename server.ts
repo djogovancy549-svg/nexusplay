@@ -98,28 +98,32 @@ function saveServerApps(apps: any[]): void {
  * Fetches public spreadsheet rows via Google GViz JSON API (/gviz/tq?tqx=out:json).
  * Works for any public Google Spreadsheet without requiring user authentication or Google login!
  */
-async function fetchAppsFromGoogleSheetGviz(sheetUrl: string): Promise<any[]> {
+async function fetchAppsFromGoogleSheetGviz(sheetUrl: string): Promise<{ sheetSynced: boolean; apps: any[] }> {
   try {
     const match = sheetUrl.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (!match || !match[1]) return [];
+    if (!match || !match[1]) return { sheetSynced: false, apps: [] };
     const spreadsheetId = match[1];
     const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json`;
 
     const res = await fetch(gvizUrl, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return [];
+    if (!res.ok) return { sheetSynced: false, apps: [] };
 
     const text = await res.text();
     const startIdx = text.indexOf('{');
     const endIdx = text.lastIndexOf('}');
-    if (startIdx === -1 || endIdx === -1) return [];
+    if (startIdx === -1 || endIdx === -1) return { sheetSynced: false, apps: [] };
 
     const jsonStr = text.substring(startIdx, endIdx + 1);
     const parsed = JSON.parse(jsonStr);
+
+    // If query status is not 'ok', GViz failed
+    if (parsed?.status !== 'ok') {
+      return { sheetSynced: false, apps: [] };
+    }
+
     const rows = parsed?.table?.rows || [];
-
-    if (!Array.isArray(rows) || rows.length === 0) return [];
-
     const fetchedApps: any[] = [];
+
     rows.forEach((r: any, idx: number) => {
       const c = r.c || [];
       const getVal = (i: number) => (c[i] && c[i].v !== null && c[i].v !== undefined) ? String(c[i].v).trim() : '';
@@ -176,10 +180,10 @@ async function fetchAppsFromGoogleSheetGviz(sheetUrl: string): Promise<any[]> {
       });
     });
 
-    return fetchedApps;
+    return { sheetSynced: true, apps: fetchedApps };
   } catch (err) {
     console.warn('GViz spreadsheet sync note:', err);
-    return [];
+    return { sheetSynced: false, apps: [] };
   }
 }
 
@@ -187,14 +191,14 @@ async function fetchAppsFromGoogleSheetGviz(sheetUrl: string): Promise<any[]> {
  * Server-side bridge to fetch remote Webhook & Spreadsheet apps.
  * Node.js runs server-side, bypassing browser CORS restrictions completely.
  */
-async function syncRemoteAppsServerSide(): Promise<any[]> {
+async function syncRemoteAppsServerSide(): Promise<{ sheetSynced: boolean; apps: any[] }> {
   const currentConfig = loadServerConfig();
   
   // 1. First try parsing Google Spreadsheet directly via GViz API (Most reliable for public sheet)
   if (currentConfig.SHEET_URL) {
-    const gvizApps = await fetchAppsFromGoogleSheetGviz(currentConfig.SHEET_URL);
-    if (gvizApps.length > 0) {
-      return gvizApps;
+    const gvizResult = await fetchAppsFromGoogleSheetGviz(currentConfig.SHEET_URL);
+    if (gvizResult.sheetSynced) {
+      return gvizResult;
     }
   }
 
@@ -208,8 +212,8 @@ async function syncRemoteAppsServerSide(): Promise<any[]> {
     if (response.ok) {
       const data = await response.json();
       const rawList = Array.isArray(data) ? data : (data.apps || data.data || []);
-      if (Array.isArray(rawList) && rawList.length > 0) {
-        return rawList.map((item: any, idx: number) => ({
+      if (Array.isArray(rawList)) {
+        const mapped = rawList.map((item: any, idx: number) => ({
           id: item.id || `remote-app-${idx}`,
           name: item.name || item.Nama || 'External App',
           packageName: item.packageName || item.PackageName || `com.nexus.app.${idx}`,
@@ -230,12 +234,13 @@ async function syncRemoteAppsServerSide(): Promise<any[]> {
           syncedToSheet: true,
           createdAt: item.timestamp || new Date().toISOString()
         }));
+        return { sheetSynced: true, apps: mapped };
       }
     }
   } catch (err) {
     console.warn('Server-side remote sync note:', err);
   }
-  return [];
+  return { sheetSynced: false, apps: [] };
 }
 
 async function startServer() {
@@ -291,24 +296,26 @@ async function startServer() {
   // ==========================================
   app.get('/api/apps', async (req, res) => {
     try {
-      let apps = loadServerApps();
+      const localApps = loadServerApps();
       
-      // Server-side remote sync (bypasses browser CORS completely)
-      const remoteApps = await syncRemoteAppsServerSide();
-      if (remoteApps.length > 0) {
-        let updated = false;
-        remoteApps.forEach(remote => {
-          if (!apps.some(a => a.id === remote.id || a.packageName === remote.packageName)) {
-            apps.push(remote);
-            updated = true;
+      // Server-side remote sync with Google Sheet as single source of truth
+      const remoteSync = await syncRemoteAppsServerSide();
+      if (remoteSync.sheetSynced) {
+        // Sheet was queried successfully! Update localApps to reflect the sheet exactly (including row deletions)
+        const syncedApps = remoteSync.apps.map(remoteApp => {
+          const match = localApps.find(l => l.id === remoteApp.id || l.packageName === remoteApp.packageName);
+          if (match && match.iconUrl && match.iconUrl.startsWith('/uploads/')) {
+            return { ...remoteApp, iconUrl: match.iconUrl };
           }
+          return remoteApp;
         });
-        if (updated) {
-          saveServerApps(apps);
-        }
+
+        // Save updated list so deleted sheet rows are purged from disk as well
+        saveServerApps(syncedApps);
+        return res.json({ success: true, count: syncedApps.length, apps: syncedApps });
       }
 
-      res.json({ success: true, count: apps.length, apps });
+      res.json({ success: true, count: localApps.length, apps: localApps });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -511,12 +518,31 @@ Respond strictly in JSON format:
   // ==========================================
   // DELETE APP
   // ==========================================
-  app.delete('/api/apps/:id', (req, res) => {
+  app.delete('/api/apps/:id', async (req, res) => {
     try {
       const appId = req.params.id;
       const apps = loadServerApps();
+      const targetApp = apps.find(a => a.id === appId);
       const filtered = apps.filter(a => a.id !== appId);
       saveServerApps(filtered);
+
+      // Asynchronously trigger row delete in Google Sheet Webhook
+      const currentConfig = loadServerConfig();
+      if (currentConfig.WEBHOOK_URL) {
+        try {
+          fetch(currentConfig.WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'DELETE',
+              appId: appId,
+              packageName: targetApp?.packageName
+            }),
+            signal: AbortSignal.timeout(5000)
+          }).catch(err => console.warn('Webhook delete trigger note:', err));
+        } catch (e) {}
+      }
+
       res.json({ success: true, remaining: filtered.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
