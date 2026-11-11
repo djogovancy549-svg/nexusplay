@@ -193,28 +193,46 @@ function saveServerApps(apps: any[]): void {
  */
 async function fetchAppsFromGoogleSheetGviz(sheetUrl: string): Promise<{ sheetSynced: boolean; apps: any[] }> {
   try {
+    console.log('DEBUG: Attempting GViz fetch for:', sheetUrl);
     const match = sheetUrl.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (!match || !match[1]) return { sheetSynced: false, apps: [] };
+    if (!match || !match[1]) {
+      console.log('DEBUG: Failed to match spreadsheet ID');
+      return { sheetSynced: false, apps: [] };
+    }
     const spreadsheetId = match[1];
     const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json`;
 
     const res = await fetch(gvizUrl, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return { sheetSynced: false, apps: [] };
+    if (!res.ok) {
+      console.log('DEBUG: GViz fetch not ok:', res.status);
+      return { sheetSynced: false, apps: [] };
+    }
 
     const text = await res.text();
     const startIdx = text.indexOf('{');
     const endIdx = text.lastIndexOf('}');
-    if (startIdx === -1 || endIdx === -1) return { sheetSynced: false, apps: [] };
+    if (startIdx === -1 || endIdx === -1) {
+      console.log('DEBUG: Failed to parse GViz JSON, body:', text.substring(0, 500));
+      return { sheetSynced: false, apps: [] };
+    }
 
     const jsonStr = text.substring(startIdx, endIdx + 1);
-    const parsed = JSON.parse(jsonStr);
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (e) {
+      console.log('DEBUG: Failed to JSON parse GViz body:', jsonStr.substring(0, 500));
+      return { sheetSynced: false, apps: [] };
+    }
 
     // If query status is not 'ok', GViz failed
     if (parsed?.status !== 'ok') {
+      console.log('DEBUG: GViz status not ok:', parsed?.status, 'Parsed body:', JSON.stringify(parsed));
       return { sheetSynced: false, apps: [] };
     }
 
     const rows = parsed?.table?.rows || [];
+    console.log('DEBUG: Fetched rows:', rows.length);
     const fetchedApps: any[] = [];
 
     rows.forEach((r: any, idx: number) => {
@@ -286,25 +304,39 @@ async function fetchAppsFromGoogleSheetGviz(sheetUrl: string): Promise<{ sheetSy
  */
 async function syncRemoteAppsServerSide(): Promise<{ sheetSynced: boolean; apps: any[] }> {
   const currentConfig = loadServerConfig();
+  console.log('DEBUG: Syncing remote apps with config:', currentConfig);
   
   // 1. First try parsing Google Spreadsheet directly via GViz API (Most reliable for public sheet)
   if (currentConfig.SHEET_URL) {
     const gvizResult = await fetchAppsFromGoogleSheetGviz(currentConfig.SHEET_URL);
     if (gvizResult.sheetSynced) {
+      console.log('DEBUG: GViz sync successful, found', gvizResult.apps.length, 'apps');
       return gvizResult;
     }
+    console.log('DEBUG: GViz sync failed');
+  } else {
+    console.log('DEBUG: No SHEET_URL configured');
   }
 
   // 2. Fallback to Webhook URL if set
   const targetWebhookUrl = currentConfig.WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycbxD1Bp5jfEP0Qnb67lABi6zH757WpstXAFhU7DIxwxtgXcm6floJ90NVCNy0u0C5psCvw/exec';
+  console.log('DEBUG: Attempting Webhook sync:', targetWebhookUrl);
   try {
     const response = await fetch(targetWebhookUrl, {
       redirect: 'follow',
       signal: AbortSignal.timeout(8000)
     });
     if (response.ok) {
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.log('DEBUG: Webhook response is not JSON:', text.substring(0, 100));
+        return { sheetSynced: false, apps: [] };
+      }
       const rawList = Array.isArray(data) ? data : (data.apps || data.data || []);
+      console.log('DEBUG: Webhook sync successful, raw data items:', rawList.length);
       if (Array.isArray(rawList)) {
         const mapped = rawList.map((item: any, idx: number) => ({
           id: item.id || `remote-app-${idx}`,
@@ -329,6 +361,8 @@ async function syncRemoteAppsServerSide(): Promise<{ sheetSynced: boolean; apps:
         }));
         return { sheetSynced: true, apps: mapped };
       }
+    } else {
+      console.log('DEBUG: Webhook sync not ok:', response.status);
     }
   } catch (err) {
     console.warn('Server-side remote sync note:', err);

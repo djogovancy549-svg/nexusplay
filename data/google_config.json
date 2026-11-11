@@ -1,7 +1,7 @@
 {
-  "SHEET_URL": "https://docs.google.com/spreadsheets/d/1x9vPsR3_VdhhwVV8SQJ4yz6PRhqNro5GjKX0D8nBQfQ/edit?usp=sharing",
-  "SHEET_API_ENDPOINT": "https://docs.google.com/spreadsheets/d/1x9vPsR3_VdhhwVV8SQJ4yz6PRhqNro5GjKX0D8nBQfQ/edit?usp=sharing",
-  "WEBHOOK_URL": "https://script.google.com/macros/s/AKfycby2SY-GAoLvegKI4wCP5Hkefkt1rRtgRa_TEsleHnRl_IhkxZ1XcD5P5Lsb5gxK0ud6DA/exec",
+  "SHEET_URL": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs740gvE2",
+  "SHEET_API_ENDPOINT": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs740gvE2",
+  "WEBHOOK_URL": "https://nexusplay.cvebi.workers.dev/",
   "DRIVE_FOLDER_ID": "173h7jlkKPHUFg91p5ly8NjsNdwnLmc-3",
   "DRIVE_FOLDER_URL": "https://drive.google.com/drive/folders/173h7jlkKPHUFg91p5ly8NjsNdwnLmc-3?usp=sharing"
 }
