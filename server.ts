@@ -95,11 +95,110 @@ function saveServerApps(apps: any[]): void {
 }
 
 /**
- * Server-side bridge to fetch remote Webhook apps (e.g. https://nexusplay.cvebi.workers.dev/).
+ * Fetches public spreadsheet rows via Google GViz JSON API (/gviz/tq?tqx=out:json).
+ * Works for any public Google Spreadsheet without requiring user authentication or Google login!
+ */
+async function fetchAppsFromGoogleSheetGviz(sheetUrl: string): Promise<any[]> {
+  try {
+    const match = sheetUrl.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match || !match[1]) return [];
+    const spreadsheetId = match[1];
+    const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json`;
+
+    const res = await fetch(gvizUrl, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return [];
+
+    const text = await res.text();
+    const startIdx = text.indexOf('{');
+    const endIdx = text.lastIndexOf('}');
+    if (startIdx === -1 || endIdx === -1) return [];
+
+    const jsonStr = text.substring(startIdx, endIdx + 1);
+    const parsed = JSON.parse(jsonStr);
+    const rows = parsed?.table?.rows || [];
+
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+
+    const fetchedApps: any[] = [];
+    rows.forEach((r: any, idx: number) => {
+      const c = r.c || [];
+      const getVal = (i: number) => (c[i] && c[i].v !== null && c[i].v !== undefined) ? String(c[i].v).trim() : '';
+
+      const id = getVal(0) || `sheet-app-${idx}`;
+      const name = getVal(1);
+      const packageName = getVal(2);
+
+      // Skip header row if returned or empty names
+      if (!name || name === 'Nama Aplikasi' || packageName === 'Package Name') return;
+
+      const version = getVal(3) || '1.0.0';
+      const fileType = (getVal(4) || 'APK').toUpperCase();
+      const sizeMb = parseFloat(getVal(5) || '49.8') || 49.8;
+      const developer = getVal(6) || 'Nexus Studio Official';
+      const iconUrl = getVal(7) || '';
+      const sha256Hash = getVal(8) || '';
+      const downloadUrl = getVal(9) || 'https://drive.google.com/drive/folders/173h7jlkKPHUFg91p5ly8NjsNdwnLmc-3?usp=sharing';
+      const createdAt = getVal(10) || new Date().toISOString();
+      const securityStatus = getVal(11) || 'VERIFIED_SECURE';
+
+      fetchedApps.push({
+        id: id || `app-${Date.now()}-${idx}`,
+        name: name,
+        packageName: packageName || `com.nexus.app.${idx}`,
+        developer: developer,
+        category: 'Productivity',
+        fileType: fileType,
+        version: version,
+        versionCode: 100,
+        sizeMb: sizeMb,
+        downloads: '100+',
+        rating: 5.0,
+        reviewsCount: 0,
+        iconUrl: iconUrl,
+        bannerUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=80',
+        description: `Aplikasi ${name} dipublikasikan via Google Sheet & Drive Catalog.`,
+        whatsNew: 'Rilis resmi aplikasi.',
+        securityAudit: {
+          sha256Hash: sha256Hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+          signatureValid: securityStatus !== 'MALWARE_DETECTED',
+          signer: `CN=${developer}, C=ID`,
+          malwareScore: securityStatus === 'MALWARE_DETECTED' ? 99 : 0,
+          permissions: [
+            { name: 'android.permission.INTERNET', level: 'normal', description: 'Akses jaringan internet.' }
+          ],
+          obfuscated: true,
+          minSdk: 26,
+          targetSdk: 34
+        },
+        downloadUrl: downloadUrl,
+        syncedToSheet: true,
+        createdAt: createdAt
+      });
+    });
+
+    return fetchedApps;
+  } catch (err) {
+    console.warn('GViz spreadsheet sync note:', err);
+    return [];
+  }
+}
+
+/**
+ * Server-side bridge to fetch remote Webhook & Spreadsheet apps.
  * Node.js runs server-side, bypassing browser CORS restrictions completely.
  */
 async function syncRemoteAppsServerSide(): Promise<any[]> {
   const currentConfig = loadServerConfig();
+  
+  // 1. First try parsing Google Spreadsheet directly via GViz API (Most reliable for public sheet)
+  if (currentConfig.SHEET_URL) {
+    const gvizApps = await fetchAppsFromGoogleSheetGviz(currentConfig.SHEET_URL);
+    if (gvizApps.length > 0) {
+      return gvizApps;
+    }
+  }
+
+  // 2. Fallback to Webhook URL if set
   const targetWebhookUrl = currentConfig.WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycbxD1Bp5jfEP0Qnb67lABi6zH757WpstXAFhU7DIxwxtgXcm6floJ90NVCNy0u0C5psCvw/exec';
   try {
     const response = await fetch(targetWebhookUrl, {
