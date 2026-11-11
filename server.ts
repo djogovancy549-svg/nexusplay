@@ -100,9 +100,12 @@ function saveServerApps(apps: any[]): void {
  */
 async function syncRemoteAppsServerSide(): Promise<any[]> {
   const currentConfig = loadServerConfig();
-  const targetWebhookUrl = currentConfig.WEBHOOK_URL || 'https://nexusplay.cvebi.workers.dev/';
+  const targetWebhookUrl = currentConfig.WEBHOOK_URL || 'https://script.google.com/macros/s/AKfycbxD1Bp5jfEP0Qnb67lABi6zH757WpstXAFhU7DIxwxtgXcm6floJ90NVCNy0u0C5psCvw/exec';
   try {
-    const response = await fetch(targetWebhookUrl, { signal: AbortSignal.timeout(3000) });
+    const response = await fetch(targetWebhookUrl, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(8000)
+    });
     if (response.ok) {
       const data = await response.json();
       const rawList = Array.isArray(data) ? data : (data.apps || data.data || []);
@@ -131,7 +134,7 @@ async function syncRemoteAppsServerSide(): Promise<any[]> {
       }
     }
   } catch (err) {
-    // Webhook offline or timeout, ignore gracefully
+    console.warn('Server-side remote sync note:', err);
   }
   return [];
 }
