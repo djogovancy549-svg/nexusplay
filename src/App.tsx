@@ -122,10 +122,11 @@ export default function App() {
   };
 
   const handleDeleteApp = async (appId: string) => {
+    const appToDelete = apps.find(a => a.id === appId);
     const updated = apps.filter(a => a.id !== appId);
     setApps(updated);
     saveStoredApps(updated);
-    await deleteAppFromServer(appId);
+    await deleteAppFromServer(appId, appToDelete?.packageName);
   };
 
   const handleInstallApp = async (app: AppItem, e?: React.MouseEvent) => {

@@ -31,10 +31,42 @@ function doPost(e) {
     }
 
     var data = JSON.parse(rawData);
-    var app = data.appData;
 
+    // ==========================================
+    // ACTION: DELETE APP ROW FROM GOOGLE SHEET
+    // ==========================================
+    if (data.action === "DELETE" || (data.appData && data.appData.action === "DELETE")) {
+      var targetId = data.appId || (data.appData && data.appData.id);
+      var targetPkg = data.packageName || (data.appData && data.appData.packageName);
+
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName("NexusAppsCatalog");
+      var deletedCount = 0;
+
+      if (sheet) {
+        var values = sheet.getDataRange().getValues();
+        for (var i = values.length - 1; i >= 1; i--) {
+          var rowId = String(values[i][0]);
+          var rowPkg = String(values[i][2]);
+          if ((targetId && rowId === String(targetId)) || (targetPkg && rowPkg === String(targetPkg))) {
+            sheet.deleteRow(i + 1);
+            deletedCount++;
+          }
+        }
+      }
+
+      return createJsonResponse({
+        status: "success",
+        message: "Aplikasi berhasil dihapus dari Google Sheet (" + deletedCount + " baris dihapus)."
+      }, 200);
+    }
+
+    // ==========================================
+    // ACTION: PUBLISH / UPDATE APP ROW IN GOOGLE SHEET
+    // ==========================================
+    var app = data.appData;
     if (!app) {
-      return createJsonResponse({ status: "error", message: "Invalid payload: appData missing" }, 400);
+      return createJsonResponse({ status: "error", message: "Invalid payload: appData or action missing" }, 400);
     }
 
     // Buka Spreadsheet aktif
@@ -70,7 +102,40 @@ function doPost(e) {
       sheet.setFrozenRows(1);
     }
 
-    // Masukkan baris data aplikasi baru
+    // Penanganan Gambar / Icon Agar Tidak Melebihi Kuota Cell Google Sheet
+    var iconUrlString = app.iconUrl || "";
+    var driveFolderId = data.driveFolderId;
+
+    // Jika gambar berupa data base64 panjang (lebih dari 300 karakter), simpan ke Google Drive sebagai file aset
+    if (iconUrlString.indexOf("data:image/") === 0 && driveFolderId && driveFolderId.indexOf("1Drive_") !== 0) {
+      try {
+        var folder = DriveApp.getFolderById(driveFolderId);
+        var base64Parts = iconUrlString.split(",");
+        var contentType = base64Parts[0].split(":")[1].split(";")[0];
+        var decodedBytes = Utilities.base64Decode(base64Parts[1]);
+        var blob = Utilities.newBlob(decodedBytes, contentType, (app.name || "app") + "_icon.png");
+        var driveFile = folder.createFile(blob);
+        driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        iconUrlString = driveFile.getUrl(); // URL singkat file Drive, hemat kuota cell!
+      } catch (imgErr) {
+        Logger.log("Image Drive save note: " + imgErr.message);
+        iconUrlString = "https://nexusstore.app/assets/icon-default.png";
+      }
+    } else if (iconUrlString.length > 500 && iconUrlString.indexOf("data:image/") === 0) {
+      // Ringkas base64 jika melebihi batas cell Google Sheet
+      iconUrlString = "Aset Gambar Tersimpan di Server";
+    }
+
+    // Periksa apakah baris aplikasi sudah ada (Update) atau belum (Append)
+    var values = sheet.getDataRange().getValues();
+    var existingRowIndex = -1;
+    for (var r = 1; r < values.length; r++) {
+      if (String(values[r][0]) === String(app.id) || String(values[r][2]) === String(app.packageName)) {
+        existingRowIndex = r + 1; // 1-based index
+        break;
+      }
+    }
+
     var rowData = [
       app.id || ("app-" + new Date().getTime()),
       app.name || "Unknown App",
@@ -79,33 +144,34 @@ function doPost(e) {
       app.fileType || "APK",
       app.sizeMb || 0,
       app.developer || "Developer",
-      app.iconUrl || "",
+      iconUrlString,
       app.sha256 || "VERIFIED_HASH",
       app.downloadUrl || "",
       app.timestamp || new Date().toISOString(),
       "VERIFIED_SECURE"
     ];
 
-    sheet.appendRow(rowData);
+    if (existingRowIndex > 0) {
+      sheet.getRange(existingRowIndex, 1, 1, rowData.length).setValues([rowData]);
+    } else {
+      sheet.appendRow(rowData);
+    }
 
-    // Optional: Log ke Google Drive jika Folder ID disediakan
-    var driveFolderId = data.driveFolderId;
+    // Optional: Log manifest ke Google Drive jika Folder ID disediakan
     if (driveFolderId && driveFolderId.indexOf("1Drive_") !== 0) {
       try {
         var folder = DriveApp.getFolderById(driveFolderId);
-        // Buat file manifest JSON catatan
         var manifestName = (app.name || "app") + "_" + (app.version || "1.0") + "_manifest.json";
         folder.createFile(manifestName, JSON.stringify(app, null, 2), MimeType.PLAIN_TEXT);
       } catch (driveErr) {
-        // Abaikan jika folder ID belum ada/privat
         Logger.log("Drive logging note: " + driveErr.message);
       }
     }
 
     return createJsonResponse({
       status: "success",
-      message: "Data " + app.name + " (" + app.fileType + ") berhasil dicatat ke Google Sheet & Drive!",
-      row: sheet.getLastRow()
+      message: "Data " + app.name + " (" + app.fileType + ") berhasil disinkronkan ke Google Sheet & Drive!",
+      row: existingRowIndex > 0 ? existingRowIndex : sheet.getLastRow()
     }, 200);
 
   } catch (error) {
@@ -134,9 +200,7 @@ function doGet(e) {
       return createJsonResponse({ status: "ready", apps: [] }, 200);
     }
 
-    var headers = values[0];
     var apps = [];
-
     for (var i = 1; i < values.length; i++) {
       var row = values[i];
       apps.push({

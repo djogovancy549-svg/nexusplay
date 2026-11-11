@@ -243,8 +243,35 @@ export const updateAppOnServer = async (app: AppItem): Promise<boolean> => {
   }
 };
 
-export const deleteAppFromServer = async (appId: string): Promise<boolean> => {
+export const deleteAppFromGoogleSheet = async (appId: string, packageName?: string): Promise<boolean> => {
+  const config = getGoogleConfig();
+  if (!config.WEBHOOK_URL) return false;
+  addSyncLog('PUSH_TO_SHEET', 'PENDING', `Mengirim perintah hapus aplikasi ${appId} ke Google Sheet...`);
   try {
+    const payload = {
+      action: 'DELETE',
+      appId: appId,
+      packageName: packageName,
+      spreadsheetUrl: config.SHEET_URL
+    };
+    await fetch(config.WEBHOOK_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Perintah hapus untuk ${appId} berhasil dikirim ke Google Sheet Webhook.`);
+    return true;
+  } catch (err) {
+    console.error('Error sending delete command to Google Sheet:', err);
+    addSyncLog('PUSH_TO_SHEET', 'ERROR', `Gagal menghapus dari Google Sheet: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    return false;
+  }
+};
+
+export const deleteAppFromServer = async (appId: string, packageName?: string): Promise<boolean> => {
+  try {
+    deleteAppFromGoogleSheet(appId, packageName);
     const res = await fetch(`/api/apps/${encodeURIComponent(appId)}`, {
       method: 'DELETE'
     });
@@ -363,6 +390,15 @@ export async function syncToGoogleSheetAndDrive(app: AppItem): Promise<boolean> 
   const config = getGoogleConfig();
   addSyncLog('PUSH_TO_SHEET', 'PENDING', `Syncing ${app.name} (${app.fileType}) to Google Sheet & Drive...`);
 
+  // Ensure iconUrl is a short clean asset URL to prevent Google Sheet cell quota errors
+  let cleanIconUrl = app.iconUrl || '';
+  if (cleanIconUrl.startsWith('/uploads/')) {
+    cleanIconUrl = (typeof window !== 'undefined' ? window.location.origin : '') + cleanIconUrl;
+  } else if (cleanIconUrl.startsWith('data:image/') && cleanIconUrl.length > 300) {
+    // Truncate long base64 strings to short SVG asset representations
+    cleanIconUrl = generateSvgAppIcon(app.name);
+  }
+
   try {
     const payload = {
       spreadsheetUrl: config.SHEET_URL,
@@ -376,7 +412,7 @@ export async function syncToGoogleSheetAndDrive(app: AppItem): Promise<boolean> 
         fileType: app.fileType,
         sizeMb: app.sizeMb,
         developer: app.developer,
-        iconUrl: app.iconUrl,
+        iconUrl: cleanIconUrl,
         sha256: app.securityAudit.sha256Hash,
         downloadUrl: app.downloadUrl,
         timestamp: new Date().toISOString()

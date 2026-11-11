@@ -7,17 +7,47 @@ import { createServer as createViteServer } from 'vite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APPS_FILE = path.join(__dirname, 'data', 'apps.json');
+const UPLOADS_DIR = path.join(__dirname, 'uploads', 'icons');
 
-// Ensure data folder exists
+// Ensure data & uploads folders exist
 if (!fs.existsSync(path.join(__dirname, 'data'))) {
   fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
+}
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+/**
+ * Converts long base64 image data into static image asset files saved on disk.
+ * This prevents filling up Google Sheet cell quotas with giant base64 strings!
+ */
+function processBase64Image(iconUrl: string, appId: string): string {
+  if (!iconUrl || typeof iconUrl !== 'string' || !iconUrl.startsWith('data:image/')) {
+    return iconUrl;
+  }
+  try {
+    const matches = iconUrl.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+    if (matches) {
+      const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+      const buffer = Buffer.from(matches[2], 'base64');
+      const safeId = String(appId).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `icon-${safeId}-${Date.now()}.${ext}`;
+      const filepath = path.join(UPLOADS_DIR, filename);
+      fs.writeFileSync(filepath, buffer);
+      return `/uploads/icons/${filename}`;
+    }
+  } catch (e) {
+    console.error('Failed to save base64 image asset:', e);
+  }
+  return iconUrl;
 }
 
 function loadServerApps(): any[] {
   try {
     if (fs.existsSync(APPS_FILE)) {
       const content = fs.readFileSync(APPS_FILE, 'utf-8');
-      return JSON.parse(content || '[]');
+      const parsed = JSON.parse(content || '[]');
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (err) {
     console.error('Failed to read server apps.json:', err);
@@ -38,6 +68,9 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+  // Serve static assets from /uploads directory
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
   // Initialize Gemini API Client server-side
   const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
@@ -55,6 +88,18 @@ async function startServer() {
     try {
       const apps = loadServerApps();
       res.json({ success: true, count: apps.length, apps });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Endpoint to convert base64 image payload into static image asset URL
+  app.post('/api/upload-icon', (req, res) => {
+    try {
+      const { imageBase64, appId } = req.body;
+      if (!imageBase64) return res.status(400).json({ error: 'No image provided' });
+      const assetUrl = processBase64Image(imageBase64, appId || `app-${Date.now()}`);
+      res.json({ success: true, iconUrl: assetUrl });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -146,7 +191,6 @@ Respond strictly in JSON format:
           details: parsed.details || (detectedBadKeywords.length > 0 ? 'File ditolak karena mengandung pola virus berbahaya.' : 'Paket terverifikasi aman.')
         };
       } catch (aiErr) {
-        // Fallback rule-based scan
         if (detectedBadKeywords.length > 0) {
           aiScanResult = {
             safe: false,
@@ -170,7 +214,7 @@ Respond strictly in JSON format:
   });
 
   // ==========================================
-  // PUBLISH APP (with mandatory Antivirus check)
+  // PUBLISH APP (with mandatory Antivirus check & Image Asset saving)
   // ==========================================
   app.post('/api/apps', async (req, res) => {
     try {
@@ -185,6 +229,14 @@ Respond strictly in JSON format:
           error: 'FILE_REJECTED_MALWARE_DETECTED',
           message: 'File APK/AAB ditolak dan dihapus otomatis oleh sistem keamanan karena terdeteksi virus/malware berbahaya.'
         });
+      }
+
+      // Convert long base64 image strings to saved static asset files on disk
+      if (newApp.iconUrl) {
+        newApp.iconUrl = processBase64Image(newApp.iconUrl, newApp.id);
+      }
+      if (newApp.bannerUrl) {
+        newApp.bannerUrl = processBase64Image(newApp.bannerUrl, `${newApp.id}-banner`);
       }
 
       const apps = loadServerApps();
@@ -205,12 +257,20 @@ Respond strictly in JSON format:
   });
 
   // ==========================================
-  // UPDATE APP (e.g. change icon, update version)
+  // UPDATE APP
   // ==========================================
   app.put('/api/apps/:id', (req, res) => {
     try {
       const appId = req.params.id;
       const updatedData = req.body;
+
+      if (updatedData.iconUrl) {
+        updatedData.iconUrl = processBase64Image(updatedData.iconUrl, appId);
+      }
+      if (updatedData.bannerUrl) {
+        updatedData.bannerUrl = processBase64Image(updatedData.bannerUrl, `${appId}-banner`);
+      }
+
       const apps = loadServerApps();
       const index = apps.findIndex(a => a.id === appId);
 
@@ -250,14 +310,14 @@ Respond strictly in JSON format:
       const { events, clientIp, userAgent } = req.body;
 
       const prompt = `You are CyberAI Sentinel, an advanced AI cybersecurity system guarding an Android APK/AAB store (Nexus Play Store).
-Analyze the following security telemetry events and detect any hacker attempts (e.g., brute force, XSS injection, unauthorized APK payload manipulation, suspicious API scraping).
+Analyze the following security telemetry events and detect any hacker attempts.
 
 Events telemetry:
 ${JSON.stringify(events || [], null, 2)}
 Client IP: ${clientIp || '127.0.0.1'}
 User Agent: ${userAgent || 'Unknown'}
 
-Return your analysis strictly in JSON format with the following structure:
+Return your analysis strictly in JSON format:
 {
   "threatDetected": boolean,
   "threatLevel": "SAFE" | "SUSPICIOUS" | "CRITICAL_ATTACK",
