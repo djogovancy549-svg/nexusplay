@@ -26,7 +26,8 @@ import {
   publishAppToServer,
   updateAppOnServer,
   deleteAppFromServer,
-  getDeveloperPin
+  getDeveloperPin,
+  getDirectDownloadUrl
 } from './services/googleService';
 import { Store, Database, ShieldAlert, ShieldCheck, Lock, X, UserCheck } from 'lucide-react';
 
@@ -147,7 +148,7 @@ export default function App() {
     }
 
     const link = document.createElement('a');
-    link.href = app.downloadUrl || '#';
+    link.href = getDirectDownloadUrl(app);
     link.download = `${app.name.replace(/\s+/g, '_')}_v${app.version}.${app.fileType.toLowerCase()}`;
     link.target = '_blank';
     document.body.appendChild(link);

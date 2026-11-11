@@ -182,6 +182,34 @@ export const fetchPublicAppsFromServer = async (): Promise<AppItem[]> => {
   return getStoredApps();
 };
 
+/**
+ * Transforms any Google Drive File or App URL into a direct binary APK file download link.
+ * Prevents opening Google Drive folder interfaces when the user clicks Install!
+ */
+export const getDirectDownloadUrl = (app: AppItem): string => {
+  if (!app) return '#';
+  const url = app.downloadUrl || '';
+
+  // Google Drive File link (/file/d/FILE_ID)
+  if (url.includes('/file/d/')) {
+    const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://drive.google.com/uc?export=download&id=${match[1]}&confirm=t`;
+    }
+  }
+
+  // Direct file ID link (id=FILE_ID)
+  if (url.includes('id=') && !url.includes('folders')) {
+    const match = url.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://drive.google.com/uc?export=download&id=${match[1]}&confirm=t`;
+    }
+  }
+
+  // Route to server's direct APK file download endpoint
+  return `/api/download-apk/${encodeURIComponent(app.id)}`;
+};
+
 export const publishAppToServer = async (app: AppItem): Promise<boolean> => {
   try {
     const res = await fetch('/api/apps', {

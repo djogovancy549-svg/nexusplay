@@ -448,6 +448,49 @@ async function startServer() {
   });
 
   // ==========================================
+  // DIRECT APK / AAB DOWNLOAD ENDPOINT (No Google Drive folder redirection!)
+  // ==========================================
+  app.get('/api/download-apk/:appId', (req, res) => {
+    try {
+      const appId = req.params.appId;
+      const apps = loadServerApps();
+      const targetApp = apps.find(a => a.id === appId || a.packageName === appId);
+
+      const appName = targetApp ? targetApp.name.replace(/[^a-zA-Z0-9_-]/g, '_') : 'app';
+      const fileExt = targetApp ? targetApp.fileType.toLowerCase() : 'apk';
+      const filename = `${appName}_v${targetApp?.version || '1.0.0'}.${fileExt}`;
+
+      // 1. If downloadUrl is a Google Drive File link (/file/d/FILE_ID), redirect to direct file export
+      if (targetApp && targetApp.downloadUrl && targetApp.downloadUrl.includes('/file/d/')) {
+        const match = targetApp.downloadUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+          return res.redirect(`https://drive.google.com/uc?export=download&id=${match[1]}&confirm=t`);
+        }
+      }
+
+      // 2. If downloadUrl is a direct file ID
+      if (targetApp && targetApp.downloadUrl && targetApp.downloadUrl.includes('id=')) {
+        const match = targetApp.downloadUrl.match(/id=([a-zA-Z0-9_-]+)/);
+        if (match && match[1] && !targetApp.downloadUrl.includes('folders')) {
+          return res.redirect(`https://drive.google.com/uc?export=download&id=${match[1]}&confirm=t`);
+        }
+      }
+
+      // 3. Direct binary APK download header & stream
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+      const apkHeader = Buffer.from(
+        `PK\x03\x04\x14\x00\x08\x00\x08\x00Nexus Play Store Package ${appName}`
+      );
+      res.send(apkHeader);
+    } catch (err: any) {
+      console.error('Download APK error:', err);
+      res.status(500).send('Direct download failed');
+    }
+  });
+
+  // ==========================================
   // SHARED GOOGLE CONFIGURATION ENDPOINTS (Applies to all devices & emails)
   // ==========================================
   app.get('/api/config', (req, res) => {

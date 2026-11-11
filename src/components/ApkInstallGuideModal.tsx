@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Smartphone, Laptop, Download, QrCode, CheckCircle2, ShieldCheck, ArrowRight, ExternalLink, HelpCircle, HardDrive } from 'lucide-react';
 import { AppItem } from '../types';
 import { AppIcon } from './AppIcon';
+import { getDirectDownloadUrl } from '../services/googleService';
 
 interface ApkInstallGuideModalProps {
   app: AppItem;
@@ -21,9 +22,9 @@ export const ApkInstallGuideModal: React.FC<ApkInstallGuideModalProps> = ({
     setDownloadStarted(true);
     onConfirmInstall();
 
-    // Trigger direct download of APK
+    // Trigger direct download of APK binary package
     const link = document.createElement('a');
-    link.href = app.downloadUrl || '#';
+    link.href = getDirectDownloadUrl(app);
     link.download = `${app.name.replace(/\s+/g, '_')}_v${app.version}.${app.fileType.toLowerCase()}`;
     link.target = '_blank';
     link.rel = 'noreferrer';
