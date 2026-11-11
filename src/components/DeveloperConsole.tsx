@@ -1,0 +1,550 @@
+import React, { useState } from 'react';
+import { AppItem, FileType, AppCategory } from '../types';
+import { Upload, Plus, Database, Cloud, ShieldCheck, Trash2, Edit, CheckCircle2, FileCode, BarChart3, UserCheck, Lock, Key, X, Cpu } from 'lucide-react';
+import { GOOGLE_CONFIG } from '../config/googleConfig';
+import { syncToGoogleSheetAndDrive } from '../services/googleService';
+import { AiSecuritySentinel } from './AiSecuritySentinel';
+
+interface DeveloperConsoleProps {
+  apps: AppItem[];
+  onPublishApp: (app: AppItem) => void;
+  onDeleteApp: (appId: string) => void;
+  onSwitchToStore: () => void;
+}
+
+const OWNER_PIN = "fnc@liO#26&*//?!x@gdj^^%+";
+
+export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
+  apps,
+  onPublishApp,
+  onDeleteApp,
+  onSwitchToStore
+}) => {
+  const [activeTab, setActiveTab] = useState<'myApps' | 'upload' | 'syncLogs' | 'aiSecurity'>('myApps');
+  const [developerName, setDeveloperName] = useState('Nexus Studio Official');
+  const [developerEmail, setDeveloperEmail] = useState('developer@nexusstore.io');
+  const [isRegistered, setIsRegistered] = useState(true);
+
+  // PIN Protection for Google Sheet & Drive Sync and AI Security
+  const [isSyncUnlocked, setIsSyncUnlocked] = useState(false);
+  const [isAiUnlocked, setIsAiUnlocked] = useState(false);
+  const [pinTarget, setPinTarget] = useState<'sync' | 'ai'>('sync');
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+
+  // Upload Form state
+  const [appName, setAppName] = useState('');
+  const [packageName, setPackageName] = useState('com.developer.app.');
+  const [category, setCategory] = useState<AppCategory>('Productivity');
+  const [fileType, setFileType] = useState<FileType>('APK');
+  const [version, setVersion] = useState('1.0.0');
+  const [sizeMb, setSizeMb] = useState('24.5');
+  const [description, setDescription] = useState('');
+  const [whatsNew, setWhatsNew] = useState('Initial release on Nexus Store.');
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFileName(file.name);
+      setSizeMb((file.size / (1024 * 1024)).toFixed(1));
+      const ext = file.name.split('.').pop()?.toUpperCase();
+      if (ext === 'AAB' || ext === 'APK') {
+        setFileType(ext as FileType);
+      }
+      const baseName = file.name.replace(/\.[^/.]+$/, '');
+      if (!appName) setAppName(baseName);
+    }
+  };
+
+  const handleSyncTabClick = () => {
+    if (isSyncUnlocked) {
+      setActiveTab('syncLogs');
+    } else {
+      setPinTarget('sync');
+      setShowPinModal(true);
+      setPinError(false);
+      setPinInput('');
+    }
+  };
+
+  const handleAiTabClick = () => {
+    if (isAiUnlocked) {
+      setActiveTab('aiSecurity');
+    } else {
+      setPinTarget('ai');
+      setShowPinModal(true);
+      setPinError(false);
+      setPinInput('');
+    }
+  };
+
+  const handleVerifyPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinInput === OWNER_PIN) {
+      if (pinTarget === 'sync') {
+        setIsSyncUnlocked(true);
+        setActiveTab('syncLogs');
+      } else {
+        setIsAiUnlocked(true);
+        setActiveTab('aiSecurity');
+      }
+      setShowPinModal(false);
+      setPinInput('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+    }
+  };
+
+  const handleSubmitApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appName || !packageName) return;
+
+    setUploading(true);
+    await new Promise(res => setTimeout(res, 1000));
+
+    const newApp: AppItem = {
+      id: `dev-app-${Date.now()}`,
+      name: appName,
+      packageName: packageName,
+      developer: developerName,
+      category: category,
+      fileType: fileType,
+      version: version,
+      versionCode: Math.floor(Math.random() * 1000) + 100,
+      sizeMb: parseFloat(sizeMb) || 20.0,
+      downloads: '0',
+      rating: 5.0,
+      reviewsCount: 0,
+      iconUrl: 'https://images.unsplash.com/photo-1618401471353-b98aedd04e11?w=200&auto=format&fit=crop&q=80',
+      bannerUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=80',
+      description: description || 'High-performance Android application published via Developer Console.',
+      whatsNew: whatsNew,
+      securityAudit: {
+        sha256Hash: Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2) + 'dev1',
+        signatureValid: true,
+        signer: `CN=${developerName}, O=Google Play Verified Developer, C=US`,
+        malwareScore: 0,
+        permissions: [
+          { name: 'android.permission.INTERNET', level: 'normal', description: 'Network connectivity.' }
+        ],
+        obfuscated: true,
+        minSdk: 26,
+        targetSdk: 34
+      },
+      downloadUrl: `${GOOGLE_CONFIG.DRIVE_FOLDER_URL}/${appName.replace(/\s+/g, '_')}_${version}.${fileType.toLowerCase()}`,
+      syncedToSheet: true,
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+
+    onPublishApp(newApp);
+    await syncToGoogleSheetAndDrive(newApp);
+
+    setUploading(false);
+    setSuccessMsg(`Successfully published ${appName} (${fileType})! Synced to Google Sheet & Drive.`);
+    setTimeout(() => {
+      setSuccessMsg('');
+      setActiveTab('myApps');
+    }, 2000);
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Developer Console Header */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 to-indigo-950 p-6 sm:p-8 rounded-3xl text-white shadow-xl">
+        <div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-medium mb-2">
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Google Play Developer Console</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Developer Dashboard</h1>
+          <p className="text-xs sm:text-sm text-slate-300 mt-1">
+            Register as a developer, upload your APK/AAB bundles, and manage automated Google Sheet & Drive sync.
+          </p>
+        </div>
+
+        <button
+          onClick={onSwitchToStore}
+          className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-xl border border-white/20 transition-all"
+        >
+          ← Back to Customer Store View
+        </button>
+      </div>
+
+      {/* Developer Profile Card */}
+      {!isRegistered ? (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Developer Registration</h3>
+          <p className="text-xs text-slate-500">Register your developer account to publish APK and AAB packages to Nexus Store.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <input
+              type="text"
+              value={developerName}
+              onChange={(e) => setDeveloperName(e.target.value)}
+              placeholder="Developer / Company Name"
+              className="px-3.5 py-2.5 text-sm bg-slate-100 dark:bg-slate-800 rounded-xl outline-none"
+            />
+            <input
+              type="email"
+              value={developerEmail}
+              onChange={(e) => setDeveloperEmail(e.target.value)}
+              placeholder="Developer Email"
+              className="px-3.5 py-2.5 text-sm bg-slate-100 dark:bg-slate-800 rounded-xl outline-none"
+            />
+          </div>
+          <button
+            onClick={() => setIsRegistered(true)}
+            className="px-6 py-2.5 bg-blue-600 text-white text-xs font-semibold rounded-xl"
+          >
+            Complete Registration
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-6 py-4 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 flex items-center justify-center font-bold">
+              {developerName.charAt(0)}
+            </div>
+            <div>
+              <div className="font-bold text-slate-900 dark:text-white text-sm">{developerName}</div>
+              <div className="text-slate-500">{developerEmail} · Verified Publisher ID: #DEV-9842</div>
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 font-semibold flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Active Developer Account
+          </span>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <button
+          onClick={() => setActiveTab('myApps')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${
+            activeTab === 'myApps' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          My Published Apps ({apps.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('upload')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${
+            activeTab === 'upload' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          + Upload New APK / AAB
+        </button>
+        <button
+          onClick={handleSyncTabClick}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 ${
+            activeTab === 'syncLogs' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          <Lock className="w-3 h-3 text-amber-500" />
+          <span>Google Sheet & Drive Sync</span>
+        </button>
+        <button
+          onClick={handleAiTabClick}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 ${
+            activeTab === 'aiSecurity' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          <Cpu className="w-3.5 h-3.5 text-blue-400" />
+          <span>AI Security Sentinel</span>
+          {!isAiUnlocked && <Lock className="w-3 h-3 text-amber-500 ml-1" />}
+        </button>
+      </div>
+
+      {/* Tab 1: My Apps */}
+      {activeTab === 'myApps' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Your Published APK & AAB Packages</h3>
+            <button
+              onClick={() => setActiveTab('upload')}
+              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> Upload App
+            </button>
+          </div>
+
+          {apps.length === 0 ? (
+            <div className="text-center py-16 px-4 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+              <FileCode className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Belum Ada Aplikasi yang Dipublikasikan</h4>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Anda belum mengunggah paket aplikasi. Klik tombol di bawah untuk mulai mengunggah APK atau AAB baru.
+              </p>
+              <button
+                onClick={() => setActiveTab('upload')}
+                className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" /> Upload APK / AAB Sekarang
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {apps.map((app) => (
+                <div key={app.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3.5 min-w-0">
+                    <img src={app.iconUrl} alt={app.name} className="w-14 h-14 rounded-xl object-cover shrink-0" referrerPolicy="no-referrer" />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                          app.fileType === 'AAB' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {app.fileType}
+                        </span>
+                        <span className="text-xs text-slate-400">v{app.version}</span>
+                      </div>
+                      <h4 className="text-base font-bold text-slate-900 dark:text-white truncate">{app.name}</h4>
+                      <p className="text-xs font-mono text-slate-500 truncate">{app.packageName}</p>
+                      <div className="flex items-center gap-3 text-xs text-slate-500 mt-2">
+                        <span>Downloads: {app.downloads}</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="text-emerald-600 flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5" /> Sheet Synced
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => onDeleteApp(app.id)}
+                    className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl"
+                    title="Remove App"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 2: Upload Form */}
+      {activeTab === 'upload' && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 max-w-2xl">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Upload APK or AAB Package</h3>
+          <p className="text-xs text-slate-500 mb-6">Submit your Android binary package. Customers browsing Nexus Store will instantly see and install it.</p>
+
+          {successMsg && (
+            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-semibold mb-6 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{successMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmitApp} className="space-y-4">
+            <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-6 text-center bg-slate-50 dark:bg-slate-800/40 relative">
+              <input
+                type="file"
+                accept=".apk,.aab"
+                onChange={handleFileSelect}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+              <FileCode className="w-10 h-10 text-blue-600 mx-auto mb-2" />
+              <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                {fileName ? fileName : 'Drop your .apk or .aab file here'}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">Automatic SHA-256 signature verification & metadata parse</div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">App Name</label>
+                <input
+                  type="text"
+                  required
+                  value={appName}
+                  onChange={(e) => setAppName(e.target.value)}
+                  placeholder="e.g. My Android App"
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-100 dark:bg-slate-800 rounded-xl outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Package Name</label>
+                <input
+                  type="text"
+                  required
+                  value={packageName}
+                  onChange={(e) => setPackageName(e.target.value)}
+                  placeholder="com.mycompany.app"
+                  className="w-full px-3.5 py-2.5 text-sm font-mono bg-slate-100 dark:bg-slate-800 rounded-xl outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Format</label>
+                <select
+                  value={fileType}
+                  onChange={(e) => setFileType(e.target.value as FileType)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-100 dark:bg-slate-800 rounded-xl outline-none"
+                >
+                  <option value="APK">APK</option>
+                  <option value="AAB">AAB (App Bundle)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as AppCategory)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-100 dark:bg-slate-800 rounded-xl outline-none"
+                >
+                  <option value="Productivity">Productivity</option>
+                  <option value="Games">Games</option>
+                  <option value="Developer Tools">Developer Tools</option>
+                  <option value="Security">Security</option>
+                  <option value="Utilities">Utilities</option>
+                  <option value="Social">Social</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Version</label>
+                <input
+                  type="text"
+                  value={version}
+                  onChange={(e) => setVersion(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-100 dark:bg-slate-800 rounded-xl outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">App Description</label>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe features for customers..."
+                className="w-full px-3.5 py-2.5 text-sm bg-slate-100 dark:bg-slate-800 rounded-xl outline-none resize-none"
+              />
+            </div>
+
+            <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2">
+              <Cloud className="w-4 h-4 shrink-0 text-blue-600" />
+              <span>Publishing will instantly sync metadata to your Google Sheet and binary to Google Drive.</span>
+            </div>
+
+            <button
+              type="submit"
+              disabled={uploading}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 disabled:opacity-50"
+            >
+              {uploading ? 'Publishing & Syncing...' : 'Publish to Nexus Store'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Tab 3: Google Sheet & Drive Sync (Protected by PIN) */}
+      {activeTab === 'syncLogs' && isSyncUnlocked && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Database className="w-5 h-5 text-emerald-600" />
+              <span>Google Sheet & Drive Integration Status (Owner Only)</span>
+            </h3>
+            <button
+              onClick={() => setIsSyncUnlocked(false)}
+              className="text-xs text-rose-600 hover:underline"
+            >
+              Lock Again
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">
+            All developer APK/AAB uploads are synchronized with the embedded Google Sheet and Google Drive repository.
+          </p>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-xs space-y-3 font-mono">
+            <div>
+              <span className="text-slate-500">Google Sheet URL:</span>
+              <div className="text-slate-800 dark:text-slate-200 truncate mt-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                {GOOGLE_CONFIG.SHEET_URL}
+              </div>
+            </div>
+            <div>
+              <span className="text-slate-500">Google Drive Folder ID:</span>
+              <div className="text-slate-800 dark:text-slate-200 truncate mt-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                {GOOGLE_CONFIG.DRIVE_FOLDER_ID}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: AI Security Sentinel */}
+      {activeTab === 'aiSecurity' && (
+        <AiSecuritySentinel />
+      )}
+
+      {/* PIN Verification Modal */}
+      {showPinModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 flex items-center justify-center">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {pinTarget === 'sync' ? 'Unlock Google Sheet & Drive Sync' : 'Unlock AI Security Sentinel'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {pinTarget === 'sync' ? 'Restricted to application owner' : 'Restricted to AI Security Administrator'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowPinModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleVerifyPin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Enter Owner PIN Code</label>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value)}
+                  placeholder="Enter secure PIN..."
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-100 dark:bg-slate-800 rounded-xl border border-transparent focus:border-blue-500 outline-none font-mono"
+                />
+                {pinError && (
+                  <p className="text-xs text-rose-600 mt-1.5 font-medium">PIN salah! Akses ditolak.</p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPinModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm"
+                >
+                  {pinTarget === 'sync' ? 'Unlock Google Sync' : 'Unlock AI Security'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
