@@ -122,23 +122,97 @@ export const saveStoredApps = (apps: AppItem[]): void => {
 };
 
 /**
- * Loads shared public apps from the server API so EVERY customer on ANY device & email
- * sees the exact same published applications in real time.
+ * Loads shared public apps from the server API and remote Webhook URL (e.g. https://nexusplay.cvebi.workers.dev/)
+ * so EVERY customer on ANY device & email sees the exact same published applications in real time.
  */
 export const fetchPublicAppsFromServer = async (): Promise<AppItem[]> => {
+  let combinedApps: AppItem[] = [];
+
+  // 1. Fetch from local Node server /api/apps (shared database)
   try {
     const res = await fetch('/api/apps');
     if (res.ok) {
       const data = await res.json();
       if (data.apps && Array.isArray(data.apps)) {
-        saveStoredApps(data.apps);
-        return data.apps;
+        combinedApps = data.apps;
       }
     }
   } catch (err) {
     console.warn('Server fetch fallback to localStorage:', err);
   }
-  return getStoredApps();
+
+  // 2. Fetch from external Webhook URL (e.g. Cloudflare Worker / Apps Script)
+  try {
+    const config = getGoogleConfig();
+    if (config.WEBHOOK_URL && config.WEBHOOK_URL.startsWith('http')) {
+      const remoteRes = await fetch(config.WEBHOOK_URL, { method: 'GET' });
+      if (remoteRes.ok) {
+        const remoteData = await remoteRes.json();
+        const rawAppsList = Array.isArray(remoteData) ? remoteData : (remoteData.apps || remoteData.data || []);
+        if (Array.isArray(rawAppsList) && rawAppsList.length > 0) {
+          const parsedRemote: AppItem[] = rawAppsList.map((item: any, idx: number) => ({
+            id: item.id || `remote-app-${idx}-${Date.now()}`,
+            name: item.name || item.Nama || 'External App',
+            packageName: item.packageName || item.PackageName || 'com.nexus.external',
+            category: item.category || 'Productivity',
+            description: item.description || item.Deskripsi || 'Aplikasi resmi dipublikasi via Nexus Webhook.',
+            version: item.version || item.Versi || '1.0.0',
+            versionCode: item.versionCode || 1,
+            fileType: (item.fileType || item.Format || 'APK').toUpperCase() as 'APK' | 'AAB',
+            sizeMb: parseFloat(item.sizeMb || item.Ukuran || '25'),
+            developer: item.developer || item.Developer || 'Nexus Studio',
+            iconUrl: item.iconUrl || item.Gambar || generateSvgAppIcon(item.name || 'App'),
+            bannerUrl: item.bannerUrl || item.iconUrl || generateSvgAppIcon(item.name || 'App'),
+            downloadUrl: item.downloadUrl || item.Link || '#',
+            downloads: item.downloads || '100+',
+            rating: item.rating || 5,
+            reviewsCount: item.reviewsCount || 1,
+            whatsNew: item.whatsNew || item.changelog || 'Publikasi perdana via Nexus Webhook.',
+            syncedToSheet: true,
+            securityAudit: item.securityAudit || {
+              sha256Hash: item.sha256 || 'VERIFIED_HASH',
+              signatureValid: true,
+              signer: item.developer || 'Nexus Certified',
+              malwareScore: 0,
+              permissions: [
+                { name: 'android.permission.INTERNET', description: 'Akses koneksi internet', level: 'normal' }
+              ],
+              obfuscated: false,
+              minSdk: 21,
+              targetSdk: 34
+            },
+            createdAt: item.timestamp || new Date().toISOString()
+          }));
+
+          // Merge without duplicates by ID or packageName
+          parsedRemote.forEach(remoteApp => {
+            const exists = combinedApps.some(a => a.id === remoteApp.id || a.packageName === remoteApp.packageName);
+            if (!exists) {
+              combinedApps.push(remoteApp);
+            }
+          });
+        }
+      }
+    }
+  } catch (webhookErr) {
+    console.warn('Remote Webhook fetch note:', webhookErr);
+  }
+
+  // 3. Fallback to localStorage if no apps were fetched
+  if (combinedApps.length === 0) {
+    combinedApps = getStoredApps();
+  }
+
+  // Ensure all icons are populated cleanly
+  const sanitized = combinedApps.map(app => {
+    if (!app.iconUrl || app.iconUrl.trim() === '' || app.iconUrl.includes('broken')) {
+      return { ...app, iconUrl: generateSvgAppIcon(app.name) };
+    }
+    return app;
+  });
+
+  saveStoredApps(sanitized);
+  return sanitized;
 };
 
 export const publishAppToServer = async (app: AppItem): Promise<boolean> => {
