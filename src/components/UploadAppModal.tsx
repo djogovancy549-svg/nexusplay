@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Upload, FileCode, ShieldCheck, CheckCircle2, Cloud, Database, Image, Sparkles, Camera } from 'lucide-react';
+import { X, Upload, FileCode, ShieldCheck, CheckCircle2, Cloud, Database, Image, Sparkles, Camera, ShieldAlert, AlertOctagon } from 'lucide-react';
 import { AppItem, FileType, AppCategory } from '../types';
-import { getGoogleConfig } from '../services/googleService';
+import { getGoogleConfig, scanPackageSecurity } from '../services/googleService';
 import { generateSvgAppIcon, DEFAULT_PRESET_GRADIENTS } from '../utils/iconGenerator';
 import { AppIcon } from './AppIcon';
 
@@ -28,6 +28,8 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
   const [iconMode, setIconMode] = useState<'upload' | 'url' | 'gradient'>('upload');
 
   const [publishing, setPublishing] = useState(false);
+  const [scanningSecurity, setScanningSecurity] = useState(false);
+  const [securityRejectReason, setSecurityRejectReason] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const handleIconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,9 +65,31 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
     if (!appName || !packageName) return;
 
     setPublishing(true);
+    setScanningSecurity(true);
+    setSecurityRejectReason(null);
+
+    // 1. Mandatory Deep Antivirus & Threat Engine Scan
+    const scanReport = await scanPackageSecurity({
+      name: appName,
+      packageName,
+      fileType,
+      sizeMb: parseFloat(sizeMb) || 20.0,
+      description,
+      developer: developer || 'Independent Developer'
+    }, { name: fileName });
+
+    setScanningSecurity(false);
+
+    // Strict rejection if virus, trojan, or high malware score detected
+    if (!scanReport.safe || scanReport.malwareScore > 35) {
+      setPublishing(false);
+      setSecurityRejectReason(`UPLOAD DITOLAK & FILE DIHAPUS OTOMATIS: ${scanReport.details} (Skor Risiko: ${scanReport.malwareScore}/100). Sistem keamanan mendeteksi potensi ancaman malware/virus pada file APK ini.`);
+      setFileName(null);
+      return;
+    }
 
     // Simulate upload to Google Drive and push to Google Sheet
-    await new Promise(res => setTimeout(res, 1200));
+    await new Promise(res => setTimeout(res, 800));
 
     const newApp: AppItem = {
       id: `app-${Date.now()}`,
@@ -121,7 +145,7 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Publish APK or AAB App</h2>
-              <p className="text-xs text-slate-500">Auto-syncs metadata &amp; icon to Google Sheets and binary to Google Drive</p>
+              <p className="text-xs text-slate-500">Auto-scan Antivirus, syncs metadata &amp; icon to Google Sheets and binary to Google Drive</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl">
@@ -129,11 +153,35 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
           </button>
         </div>
 
+        {/* Rejection Alert if Virus/Malware detected */}
+        {securityRejectReason && (
+          <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-semibold mb-6 flex items-start gap-3 animate-in shake duration-300">
+            <AlertOctagon className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold block text-sm">File APK Ditolak &amp; Dihapus!</span>
+              <p className="mt-1 leading-relaxed text-[11px] text-rose-700 dark:text-rose-300">
+                {securityRejectReason}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Live scanning progress */}
+        {scanningSecurity && (
+          <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300 text-xs font-semibold mb-6 flex items-center gap-3 animate-pulse">
+            <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0 animate-spin" />
+            <div>
+              <span>Memeriksa Keamanan File APK/AAB dengan AI Antivirus &amp; Threat Engine...</span>
+              <p className="text-[10px] text-blue-600/80 font-normal mt-0.5">Memindai trojan, ransomware, signature backdoor, dan izin berbahaya.</p>
+            </div>
+          </div>
+        )}
+
         {success ? (
           <div className="text-center py-12 space-y-4">
             <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto animate-bounce" />
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Published & Synced Successfully!</h3>
-            <p className="text-xs text-slate-500">Your app and icon have been added to the store catalog and synced to Google Sheets & Drive.</p>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Published &amp; Synced Successfully!</h3>
+            <p className="text-xs text-slate-500">Paket APK lolos verifikasi antivirus dan telah dipublikasikan ke semua perangkat &amp; Google Sheet.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">

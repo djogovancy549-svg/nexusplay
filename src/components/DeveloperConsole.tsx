@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppItem, FileType, AppCategory } from '../types';
-import { Upload, Plus, Database, Cloud, ShieldCheck, Trash2, Edit, CheckCircle2, FileCode, BarChart3, UserCheck, Lock, Key, X, Cpu, Save, ExternalLink, Image, Sparkles, Camera, Edit3 } from 'lucide-react';
-import { syncToGoogleSheetAndDrive, getGoogleConfig, saveGoogleConfig } from '../services/googleService';
+import { Upload, Plus, Database, Cloud, ShieldCheck, Trash2, Edit, CheckCircle2, FileCode, BarChart3, UserCheck, Lock, Key, X, Cpu, Save, ExternalLink, Image, Sparkles, Camera, Edit3, ShieldAlert, AlertOctagon } from 'lucide-react';
+import { syncToGoogleSheetAndDrive, getGoogleConfig, saveGoogleConfig, scanPackageSecurity } from '../services/googleService';
 import { AiSecuritySentinel } from './AiSecuritySentinel';
 import { AppIcon } from './AppIcon';
 import { generateSvgAppIcon, DEFAULT_PRESET_GRADIENTS } from '../utils/iconGenerator';
@@ -53,6 +53,8 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
   const [whatsNew, setWhatsNew] = useState('Initial release on Nexus Store.');
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [scanningSecurity, setScanningSecurity] = useState(false);
+  const [securityRejectReason, setSecurityRejectReason] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
 
   // Icon State for Upload
@@ -125,7 +127,29 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
     if (!appName || !packageName) return;
 
     setUploading(true);
-    await new Promise(res => setTimeout(res, 1000));
+    setScanningSecurity(true);
+    setSecurityRejectReason(null);
+
+    // 1. Mandatory Deep Antivirus & Threat Engine Scan
+    const scanReport = await scanPackageSecurity({
+      name: appName,
+      packageName,
+      fileType,
+      sizeMb: parseFloat(sizeMb) || 20.0,
+      description,
+      developer: developerName
+    }, { name: fileName });
+
+    setScanningSecurity(false);
+
+    if (!scanReport.safe || scanReport.malwareScore > 35) {
+      setUploading(false);
+      setSecurityRejectReason(`UPLOAD DITOLAK & FILE DIHAPUS OTOMATIS: ${scanReport.details} (Skor Risiko: ${scanReport.malwareScore}/100). Sistem keamanan mendeteksi potensi virus atau malware berbahaya pada paket APK ini.`);
+      setFileName(null);
+      return;
+    }
+
+    await new Promise(res => setTimeout(res, 800));
 
     const newApp: AppItem = {
       id: `dev-app-${Date.now()}`,
@@ -393,6 +417,28 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
             <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-semibold mb-6 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4" />
               <span>{successMsg}</span>
+            </div>
+          )}
+
+          {securityRejectReason && (
+            <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-semibold mb-6 flex items-start gap-3 animate-in shake duration-300">
+              <AlertOctagon className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block text-sm">File APK Ditolak &amp; Dihapus Otomatis!</span>
+                <p className="mt-1 leading-relaxed text-[11px] text-rose-700 dark:text-rose-300">
+                  {securityRejectReason}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {scanningSecurity && (
+            <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300 text-xs font-semibold mb-6 flex items-center gap-3 animate-pulse">
+              <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0 animate-spin" />
+              <div>
+                <span>Memeriksa Keamanan File APK/AAB dengan AI Antivirus &amp; Threat Engine...</span>
+                <p className="text-[10px] text-blue-600/80 font-normal mt-0.5">Memindai tanda-tanda virus, trojan, ransomware, dan backdoor tersembunyi.</p>
+              </div>
             </div>
           )}
 

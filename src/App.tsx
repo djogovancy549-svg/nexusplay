@@ -13,10 +13,22 @@ import { SecurityInspectorModal } from './components/SecurityInspectorModal';
 import { GoogleSyncPanel } from './components/GoogleSyncPanel';
 import { InstalledAppsModal } from './components/InstalledAppsModal';
 import { DeveloperConsole } from './components/DeveloperConsole';
+import { ApkInstallGuideModal } from './components/ApkInstallGuideModal';
 import { AppItem, AppCategory } from './types';
-import { getStoredApps, saveStoredApps, getInstalledAppIds, saveInstalledAppIds, syncToGoogleSheetAndDrive } from './services/googleService';
-import { Store, Database, ShieldAlert, ShieldCheck, Lock, X } from 'lucide-react';
+import {
+  getStoredApps,
+  saveStoredApps,
+  getInstalledAppIds,
+  saveInstalledAppIds,
+  syncToGoogleSheetAndDrive,
+  fetchPublicAppsFromServer,
+  publishAppToServer,
+  updateAppOnServer,
+  deleteAppFromServer
+} from './services/googleService';
+import { Store, Database, ShieldAlert, ShieldCheck, Lock, X, UserCheck } from 'lucide-react';
 
+const DEVELOPER_CONSOLE_PIN = "developer#$%//f26@nnc^^ebi";
 const OWNER_PIN = "fnc@liO#26&*//?!x@gdj^^%+";
 
 export default function App() {
@@ -34,11 +46,18 @@ export default function App() {
   const [showUpload, setShowUpload] = useState(false);
   const [showSyncPanel, setShowSyncPanel] = useState(false);
   const [showInstalled, setShowInstalled] = useState(false);
+  const [guideModalApp, setGuideModalApp] = useState<AppItem | null>(null);
 
-  // Sync Panel PIN Protection
+  // Sync Panel PIN Protection (Owner)
   const [showSyncPinModal, setShowSyncPinModal] = useState(false);
   const [syncPinInput, setSyncPinInput] = useState('');
   const [syncPinError, setSyncPinError] = useState(false);
+
+  // Developer Console PIN Protection (Developer)
+  const [showDevPinModal, setShowDevPinModal] = useState(false);
+  const [devPinInput, setDevPinInput] = useState('');
+  const [devPinError, setDevPinError] = useState(false);
+  const [isDevUnlocked, setIsDevUnlocked] = useState(false);
 
   // Cybersecurity & Anti-Hacker Protections
   useEffect(() => {
@@ -71,6 +90,15 @@ export default function App() {
     };
   }, [darkMode]);
 
+  // Fetch shared apps from server on startup (Available to all users, devices, and emails)
+  useEffect(() => {
+    fetchPublicAppsFromServer().then((sharedApps) => {
+      if (sharedApps && sharedApps.length > 0) {
+        setApps(sharedApps);
+      }
+    });
+  }, []);
+
   const triggerSecurityWarning = (msg: string) => {
     setSecurityNotice(msg);
     setTimeout(() => setSecurityNotice(null), 3500);
@@ -80,36 +108,81 @@ export default function App() {
     const updated = [newApp, ...apps];
     setApps(updated);
     saveStoredApps(updated);
+    await publishAppToServer(newApp);
   };
 
-  const handleUpdateApp = (updatedApp: AppItem) => {
+  const handleUpdateApp = async (updatedApp: AppItem) => {
     const updated = apps.map(a => a.id === updatedApp.id ? updatedApp : a);
     setApps(updated);
     saveStoredApps(updated);
     if (selectedApp && selectedApp.id === updatedApp.id) {
       setSelectedApp(updatedApp);
     }
+    await updateAppOnServer(updatedApp);
   };
 
-  const handleDeleteApp = (appId: string) => {
+  const handleDeleteApp = async (appId: string) => {
     const updated = apps.filter(a => a.id !== appId);
     setApps(updated);
     saveStoredApps(updated);
+    await deleteAppFromServer(appId);
   };
 
   const handleInstallApp = async (app: AppItem, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    // If user is on Laptop / PC desktop, open the guide modal with APK download & QR code
+    const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent);
+    if (!isMobile) {
+      setGuideModalApp(app);
+      return;
+    }
+
     if (!installedIds.includes(app.id)) {
       const updated = [...installedIds, app.id];
       setInstalledIds(updated);
       saveInstalledAppIds(updated);
     }
+
+    const link = document.createElement('a');
+    link.href = app.downloadUrl || '#';
+    link.download = `${app.name.replace(/\s+/g, '_')}_v${app.version}.${app.fileType.toLowerCase()}`;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleUninstallApp = (appId: string) => {
     const updated = installedIds.filter(id => id !== appId);
     setInstalledIds(updated);
     saveInstalledAppIds(updated);
+  };
+
+  const handleSwitchMode = (mode: 'store' | 'developer') => {
+    if (mode === 'developer') {
+      if (isDevUnlocked) {
+        setActiveMode('developer');
+      } else {
+        setShowDevPinModal(true);
+        setDevPinInput('');
+        setDevPinError(false);
+      }
+    } else {
+      setActiveMode('store');
+    }
+  };
+
+  const handleVerifyDevPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (devPinInput === DEVELOPER_CONSOLE_PIN) {
+      setIsDevUnlocked(true);
+      setShowDevPinModal(false);
+      setActiveMode('developer');
+      setDevPinInput('');
+      setDevPinError(false);
+    } else {
+      setDevPinError(true);
+    }
   };
 
   // Filter apps based on search & category
@@ -165,7 +238,7 @@ export default function App() {
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         activeMode={activeMode}
-        onSwitchMode={(mode) => setActiveMode(mode)}
+        onSwitchMode={handleSwitchMode}
       />
 
       {/* Main Container */}
@@ -328,6 +401,88 @@ export default function App() {
           onClose={() => setShowInstalled(false)}
           onUninstall={handleUninstallApp}
           onSelectApp={(app) => setSelectedApp(app)}
+        />
+      )}
+
+      {/* Developer Console PIN Verification Modal */}
+      {showDevPinModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
+                  <UserCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    PIN Developer Console Diperlukan
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Akses dashboard khusus pengembang terverifikasi
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDevPinModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleVerifyDevPin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Masukkan PIN Developer
+                </label>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  value={devPinInput}
+                  onChange={(e) => setDevPinInput(e.target.value)}
+                  placeholder="Masukkan PIN developer..."
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl border border-transparent focus:border-blue-500 outline-none font-mono"
+                />
+                {devPinError && (
+                  <p className="text-xs text-rose-600 mt-1.5 font-medium">
+                    PIN Developer salah! Akses ditolak.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDevPinModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm"
+                >
+                  Buka Developer Console
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* APK Installation Guide for Laptop / PC / Mobile */}
+      {guideModalApp && (
+        <ApkInstallGuideModal
+          app={guideModalApp}
+          onClose={() => setGuideModalApp(null)}
+          onConfirmInstall={() => {
+            if (!installedIds.includes(guideModalApp.id)) {
+              const updated = [...installedIds, guideModalApp.id];
+              setInstalledIds(updated);
+              saveInstalledAppIds(updated);
+            }
+          }}
         />
       )}
     </div>
