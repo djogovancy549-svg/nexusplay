@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Star, ShieldCheck, Download, CheckCircle2, Lock, Cpu, FileText, ExternalLink, HardDrive, Database } from 'lucide-react';
 import { AppItem } from '../types';
+import { AppIcon } from './AppIcon';
 
 interface AppDetailModalProps {
   app: AppItem;
@@ -58,11 +59,10 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({
           </button>
 
           <div className="absolute bottom-6 left-6 right-6 flex items-end gap-5">
-            <img
-              src={app.iconUrl}
-              alt={app.name}
-              className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover shadow-2xl border-2 border-white dark:border-slate-800"
-              referrerPolicy="no-referrer"
+            <AppIcon
+              name={app.name}
+              iconUrl={app.iconUrl}
+              className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover shadow-2xl border-2 border-white dark:border-slate-800 text-xl font-bold"
             />
             <div className="text-white flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">

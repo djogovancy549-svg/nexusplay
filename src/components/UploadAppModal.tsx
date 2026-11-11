@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { X, Upload, FileCode, ShieldCheck, CheckCircle2, Cloud, Database } from 'lucide-react';
+import { X, Upload, FileCode, ShieldCheck, CheckCircle2, Cloud, Database, Image, Sparkles, Camera } from 'lucide-react';
 import { AppItem, FileType, AppCategory } from '../types';
 import { getGoogleConfig } from '../services/googleService';
+import { generateSvgAppIcon, DEFAULT_PRESET_GRADIENTS } from '../utils/iconGenerator';
+import { AppIcon } from './AppIcon';
 
 interface UploadAppModalProps {
   onClose: () => void;
@@ -19,8 +21,27 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
   const [description, setDescription] = useState('');
   const [whatsNew, setWhatsNew] = useState('Initial production release.');
   const [fileName, setFileName] = useState<string | null>(null);
+  
+  // Icon State
+  const [customIconUrl, setCustomIconUrl] = useState('');
+  const [selectedGradient, setSelectedGradient] = useState<[string, string]>(['#2563eb', '#1d4ed8']);
+  const [iconMode, setIconMode] = useState<'upload' | 'url' | 'gradient'>('upload');
+
   const [publishing, setPublishing] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  const handleIconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (typeof event.target?.result === 'string') {
+          setCustomIconUrl(event.target.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleFileDropSimulator = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -59,7 +80,7 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
       downloads: '10+',
       rating: 5.0,
       reviewsCount: 1,
-      iconUrl: 'https://images.unsplash.com/photo-1618401471353-b98aedd04e11?w=200&auto=format&fit=crop&q=80',
+      iconUrl: customIconUrl.trim() || generateSvgAppIcon(appName || 'App', selectedGradient),
       bannerUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=80',
       description: description || 'High-performance Android application tested and verified for security compliance.',
       whatsNew: whatsNew,
@@ -100,7 +121,7 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Publish APK or AAB App</h2>
-              <p className="text-xs text-slate-500">Auto-syncs metadata to Google Sheets and binary to Google Drive</p>
+              <p className="text-xs text-slate-500">Auto-syncs metadata &amp; icon to Google Sheets and binary to Google Drive</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl">
@@ -112,7 +133,7 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
           <div className="text-center py-12 space-y-4">
             <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto animate-bounce" />
             <h3 className="text-xl font-bold text-slate-900 dark:text-white">Published & Synced Successfully!</h3>
-            <p className="text-xs text-slate-500">Your app has been added to the store catalog and synced to Google Sheets & Drive.</p>
+            <p className="text-xs text-slate-500">Your app and icon have been added to the store catalog and synced to Google Sheets & Drive.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -129,6 +150,108 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
                 {fileName ? fileName : 'Drop your APK or AAB file here, or browse'}
               </div>
               <div className="text-xs text-slate-500 mt-1">Supports Android App Bundles (.aab) & Packages (.apk)</div>
+            </div>
+
+            {/* App Icon Upload / Customizer Section */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Image className="w-4 h-4 text-blue-600" />
+                  <span>Gambar / Icon Aplikasi</span>
+                </label>
+                <div className="flex items-center gap-1 bg-slate-200 dark:bg-slate-700 p-0.5 rounded-lg text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setIconMode('upload')}
+                    className={`px-2 py-1 rounded-md font-semibold transition-all ${iconMode === 'upload' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+                  >
+                    Upload File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIconMode('url')}
+                    className={`px-2 py-1 rounded-md font-semibold transition-all ${iconMode === 'url' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+                  >
+                    Link URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIconMode('gradient')}
+                    className={`px-2 py-1 rounded-md font-semibold transition-all ${iconMode === 'gradient' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+                  >
+                    Gradien Icon
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="shrink-0 text-center">
+                  <AppIcon
+                    name={appName || 'App'}
+                    iconUrl={customIconUrl}
+                    className="w-16 h-16 rounded-2xl shadow-md border-2 border-slate-200 dark:border-slate-700 mx-auto"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">Preview Icon</span>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  {iconMode === 'upload' && (
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] text-slate-500">Pilih gambar logo/icon dari komputer (PNG, JPG, WebP):</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleIconUpload}
+                        className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-950 dark:file:text-blue-300 hover:file:bg-blue-100 cursor-pointer"
+                      />
+                    </div>
+                  )}
+
+                  {iconMode === 'url' && (
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] text-slate-500">Tempel URL Link Gambar Langsung:</label>
+                      <input
+                        type="url"
+                        value={customIconUrl}
+                        onChange={(e) => setCustomIconUrl(e.target.value)}
+                        placeholder="https://example.com/logo.png"
+                        className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {iconMode === 'gradient' && (
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] text-slate-500">Pilih Warna Gradien Monogram Otomatis:</label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {DEFAULT_PRESET_GRADIENTS.map((p) => (
+                          <button
+                            key={p.name}
+                            type="button"
+                            onClick={() => {
+                              setSelectedGradient(p.colors);
+                              setCustomIconUrl(generateSvgAppIcon(appName || 'App', p.colors));
+                            }}
+                            className="w-7 h-7 rounded-xl border-2 border-white dark:border-slate-700 shadow-sm transition-transform hover:scale-110"
+                            style={{ background: `linear-gradient(135deg, ${p.colors[0]}, ${p.colors[1]})` }}
+                            title={p.name}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {customIconUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomIconUrl('')}
+                      className="text-[10px] text-rose-500 hover:underline mt-1 inline-block"
+                    >
+                      Reset / Gunakan Icon Otomatis
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

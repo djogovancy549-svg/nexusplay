@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldCheck, Download, Star, Cpu } from 'lucide-react';
 import { AppItem } from '../types';
+import { AppIcon } from './AppIcon';
 
 interface HeroBannerProps {
   featuredApp: AppItem;
@@ -31,9 +32,19 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ featuredApp, onSelectApp
             </span>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mb-3 text-balance">
-            {featuredApp.name}
-          </h1>
+          <div className="flex items-center gap-4 mb-4">
+            <AppIcon
+              name={featuredApp.name}
+              iconUrl={featuredApp.iconUrl}
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl shadow-xl border-2 border-white/20 shrink-0 text-xl font-bold"
+            />
+            <div>
+              <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white text-balance">
+                {featuredApp.name}
+              </h1>
+              <p className="text-xs sm:text-sm text-blue-200 mt-0.5">{featuredApp.developer}</p>
+            </div>
+          </div>
 
           <p className="text-slate-300 text-sm sm:text-base leading-relaxed mb-6 line-clamp-2">
             {featuredApp.description}

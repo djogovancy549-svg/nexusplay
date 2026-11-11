@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Package, Trash2, CheckCircle2, ShieldCheck, Download } from 'lucide-react';
 import { AppItem } from '../types';
+import { AppIcon } from './AppIcon';
 
 interface InstalledAppsModalProps {
   installedApps: AppItem[];
@@ -53,11 +54,10 @@ export const InstalledAppsModal: React.FC<InstalledAppsModalProps> = ({
                   }}
                   className="flex items-center gap-3.5 flex-1 min-w-0 cursor-pointer group"
                 >
-                  <img
-                    src={app.iconUrl}
-                    alt={app.name}
+                  <AppIcon
+                    name={app.name}
+                    iconUrl={app.iconUrl}
                     className="w-12 h-12 rounded-xl object-cover shadow-sm group-hover:scale-105 transition-transform"
-                    referrerPolicy="no-referrer"
                   />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">

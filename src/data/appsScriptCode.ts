@@ -54,6 +54,7 @@ function doPost(e) {
         "Format",
         "Ukuran (MB)",
         "Developer",
+        "Icon URL / Gambar",
         "SHA-256 Hash",
         "Link Download / Drive",
         "Waktu Upload",
@@ -78,6 +79,7 @@ function doPost(e) {
       app.fileType || "APK",
       app.sizeMb || 0,
       app.developer || "Developer",
+      app.iconUrl || "",
       app.sha256 || "VERIFIED_HASH",
       app.downloadUrl || "",
       app.timestamp || new Date().toISOString(),
@@ -145,10 +147,11 @@ function doGet(e) {
         fileType: row[4],
         sizeMb: row[5],
         developer: row[6],
-        sha256: row[7],
-        downloadUrl: row[8],
-        timestamp: row[9],
-        securityStatus: row[10]
+        iconUrl: row[7],
+        sha256: row[8],
+        downloadUrl: row[9],
+        timestamp: row[10],
+        securityStatus: row[11]
       });
     }
 

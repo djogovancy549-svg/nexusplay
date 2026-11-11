@@ -1,6 +1,7 @@
 import React from 'react';
 import { Star, ShieldCheck, Download, FileCode, CheckCircle2 } from 'lucide-react';
 import { AppItem, AppCategory } from '../types';
+import { AppIcon } from './AppIcon';
 
 interface AppCatalogProps {
   apps: AppItem[];
@@ -67,11 +68,10 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
                 <div>
                   {/* Top row: Icon, Name, FileType badge */}
                   <div className="flex items-start gap-4 mb-4">
-                    <img
-                      src={app.iconUrl}
-                      alt={app.name}
+                    <AppIcon
+                      name={app.name}
+                      iconUrl={app.iconUrl}
                       className="w-16 h-16 rounded-2xl object-cover shadow-md group-hover:scale-105 transition-transform"
-                      referrerPolicy="no-referrer"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-1">

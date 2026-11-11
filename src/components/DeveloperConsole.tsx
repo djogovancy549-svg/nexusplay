@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { AppItem, FileType, AppCategory } from '../types';
-import { Upload, Plus, Database, Cloud, ShieldCheck, Trash2, Edit, CheckCircle2, FileCode, BarChart3, UserCheck, Lock, Key, X, Cpu, Save, ExternalLink } from 'lucide-react';
+import { Upload, Plus, Database, Cloud, ShieldCheck, Trash2, Edit, CheckCircle2, FileCode, BarChart3, UserCheck, Lock, Key, X, Cpu, Save, ExternalLink, Image, Sparkles, Camera, Edit3 } from 'lucide-react';
 import { syncToGoogleSheetAndDrive, getGoogleConfig, saveGoogleConfig } from '../services/googleService';
 import { AiSecuritySentinel } from './AiSecuritySentinel';
+import { AppIcon } from './AppIcon';
+import { generateSvgAppIcon, DEFAULT_PRESET_GRADIENTS } from '../utils/iconGenerator';
 
 interface DeveloperConsoleProps {
   apps: AppItem[];
   onPublishApp: (app: AppItem) => void;
+  onUpdateApp?: (app: AppItem) => void;
   onDeleteApp: (appId: string) => void;
   onSwitchToStore: () => void;
 }
@@ -16,6 +19,7 @@ const OWNER_PIN = "fnc@liO#26&*//?!x@gdj^^%+";
 export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
   apps,
   onPublishApp,
+  onUpdateApp,
   onDeleteApp,
   onSwitchToStore
 }) => {
@@ -50,6 +54,17 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Icon State for Upload
+  const [customIconUrl, setCustomIconUrl] = useState('');
+  const [iconMode, setIconMode] = useState<'upload' | 'url' | 'gradient'>('upload');
+  const [selectedGradient, setSelectedGradient] = useState<[string, string]>(['#2563eb', '#1d4ed8']);
+
+  // Editing existing App Icon state (e.g. SPAMMOBILE)
+  const [editingApp, setEditingApp] = useState<AppItem | null>(null);
+  const [editIconUrl, setEditIconUrl] = useState('');
+  const [editIconMode, setEditIconMode] = useState<'upload' | 'url' | 'gradient'>('upload');
+  const [editSuccessMsg, setEditSuccessMsg] = useState('');
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -125,7 +140,7 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
       downloads: '0',
       rating: 5.0,
       reviewsCount: 0,
-      iconUrl: 'https://images.unsplash.com/photo-1618401471353-b98aedd04e11?w=200&auto=format&fit=crop&q=80',
+      iconUrl: customIconUrl.trim() || generateSvgAppIcon(appName || 'App', selectedGradient),
       bannerUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=80',
       description: description || 'High-performance Android application published via Developer Console.',
       whatsNew: whatsNew,
@@ -155,6 +170,28 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
       setSuccessMsg('');
       setActiveTab('myApps');
     }, 2000);
+  };
+
+  const handleSaveEditedIcon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingApp) return;
+
+    const finalIcon = editIconUrl.trim() || generateSvgAppIcon(editingApp.name);
+    const updatedApp: AppItem = {
+      ...editingApp,
+      iconUrl: finalIcon
+    };
+
+    if (onUpdateApp) {
+      onUpdateApp(updatedApp);
+    }
+    await syncToGoogleSheetAndDrive(updatedApp);
+
+    setEditSuccessMsg(`Gambar icon untuk ${editingApp.name} berhasil diperbarui & disinkronkan ke Google Sheet!`);
+    setTimeout(() => {
+      setEditSuccessMsg('');
+      setEditingApp(null);
+    }, 1500);
   };
 
   return (
@@ -294,9 +331,9 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {apps.map((app) => (
-                <div key={app.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4">
+                <div key={app.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4 shadow-xs">
                   <div className="flex items-start gap-3.5 min-w-0">
-                    <img src={app.iconUrl} alt={app.name} className="w-14 h-14 rounded-xl object-cover shrink-0" referrerPolicy="no-referrer" />
+                    <AppIcon name={app.name} iconUrl={app.iconUrl} className="w-14 h-14 rounded-xl object-cover shrink-0 shadow-sm" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
@@ -318,13 +355,27 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => onDeleteApp(app.id)}
-                    className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl"
-                    title="Remove App"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingApp(app);
+                        setEditIconUrl(app.iconUrl);
+                        setEditSuccessMsg('');
+                      }}
+                      className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-xl transition-colors"
+                      title="Ganti Gambar / Icon Aplikasi"
+                    >
+                      <Image className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => onDeleteApp(app.id)}
+                      className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition-colors"
+                      title="Hapus Aplikasi"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -358,6 +409,119 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
                 {fileName ? fileName : 'Drop your .apk or .aab file here'}
               </div>
               <div className="text-xs text-slate-500 mt-1">Automatic SHA-256 signature verification & metadata parse</div>
+            </div>
+
+            {/* App Icon Upload / Customizer Section */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Image className="w-4 h-4 text-blue-600" />
+                  <span>Gambar / Icon Aplikasi</span>
+                </label>
+                <div className="flex items-center gap-1 bg-slate-200 dark:bg-slate-700 p-0.5 rounded-lg text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setIconMode('upload')}
+                    className={`px-2 py-1 rounded-md font-semibold transition-all ${iconMode === 'upload' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+                  >
+                    Upload File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIconMode('url')}
+                    className={`px-2 py-1 rounded-md font-semibold transition-all ${iconMode === 'url' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+                  >
+                    Link URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIconMode('gradient')}
+                    className={`px-2 py-1 rounded-md font-semibold transition-all ${iconMode === 'gradient' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+                  >
+                    Gradien Icon
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="shrink-0 text-center">
+                  <AppIcon
+                    name={appName || 'App'}
+                    iconUrl={customIconUrl}
+                    className="w-16 h-16 rounded-2xl shadow-md border-2 border-slate-200 dark:border-slate-700 mx-auto"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">Preview Icon</span>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  {iconMode === 'upload' && (
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] text-slate-500">Pilih gambar logo/icon dari komputer (PNG, JPG, WebP):</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              if (typeof ev.target?.result === 'string') {
+                                setCustomIconUrl(ev.target.result);
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-950 dark:file:text-blue-300 hover:file:bg-blue-100 cursor-pointer"
+                      />
+                    </div>
+                  )}
+
+                  {iconMode === 'url' && (
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] text-slate-500">Tempel URL Link Gambar Langsung:</label>
+                      <input
+                        type="url"
+                        value={customIconUrl}
+                        onChange={(e) => setCustomIconUrl(e.target.value)}
+                        placeholder="https://example.com/logo.png"
+                        className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {iconMode === 'gradient' && (
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] text-slate-500">Pilih Warna Gradien Monogram Otomatis:</label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {DEFAULT_PRESET_GRADIENTS.map((p) => (
+                          <button
+                            key={p.name}
+                            type="button"
+                            onClick={() => {
+                              setSelectedGradient(p.colors);
+                              setCustomIconUrl(generateSvgAppIcon(appName || 'App', p.colors));
+                            }}
+                            className="w-7 h-7 rounded-xl border-2 border-white dark:border-slate-700 shadow-sm transition-transform hover:scale-110"
+                            style={{ background: `linear-gradient(135deg, ${p.colors[0]}, ${p.colors[1]})` }}
+                            title={p.name}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {customIconUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomIconUrl('')}
+                      className="text-[10px] text-rose-500 hover:underline mt-1 inline-block"
+                    >
+                      Reset / Gunakan Icon Otomatis
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -611,6 +775,152 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
                   className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm"
                 >
                   {pinTarget === 'sync' ? 'Unlock Google Sync' : 'Unlock AI Security'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit App Icon Modal */}
+      {editingApp && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
+                  <Image className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Ganti Gambar / Icon Aplikasi
+                  </h3>
+                  <p className="text-[11px] text-slate-500">{editingApp.name} ({editingApp.fileType})</p>
+                </div>
+              </div>
+              <button onClick={() => setEditingApp(null)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {editSuccessMsg && (
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{editSuccessMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEditedIcon} className="space-y-4">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex flex-col items-center gap-3">
+                <AppIcon
+                  name={editingApp.name}
+                  iconUrl={editIconUrl}
+                  className="w-20 h-20 rounded-2xl shadow-lg border-2 border-slate-200 dark:border-slate-700"
+                />
+                <span className="text-[11px] text-slate-500 font-medium">Pratinjau Icon Saat Ini</span>
+              </div>
+
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
+                <button
+                  type="button"
+                  onClick={() => setEditIconMode('upload')}
+                  className={`flex-1 py-1.5 rounded-lg font-semibold transition-all ${editIconMode === 'upload' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+                >
+                  Upload File Baru
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditIconMode('url')}
+                  className={`flex-1 py-1.5 rounded-lg font-semibold transition-all ${editIconMode === 'url' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+                >
+                  Link Gambar (URL)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditIconMode('gradient')}
+                  className={`flex-1 py-1.5 rounded-lg font-semibold transition-all ${editIconMode === 'gradient' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'}`}
+                >
+                  Gradien Icon
+                </button>
+              </div>
+
+              {editIconMode === 'upload' && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Pilih file gambar dari perangkat Anda:
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          if (typeof ev.target?.result === 'string') {
+                            setEditIconUrl(ev.target.result);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-950 dark:file:text-blue-300 hover:file:bg-blue-100 cursor-pointer"
+                  />
+                  <p className="text-[10px] text-slate-400">Mendukung format PNG, JPG, WebP, SVG transparan.</p>
+                </div>
+              )}
+
+              {editIconMode === 'url' && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Masukkan URL / Tautan Gambar:
+                  </label>
+                  <input
+                    type="url"
+                    value={editIconUrl}
+                    onChange={(e) => setEditIconUrl(e.target.value)}
+                    placeholder="https://example.com/icon.png"
+                    className="w-full px-3.5 py-2.5 text-xs bg-slate-100 dark:bg-slate-800 rounded-xl border border-transparent focus:border-blue-500 outline-none"
+                  />
+                </div>
+              )}
+
+              {editIconMode === 'gradient' && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Pilih Tema Warna Gradien Otomatis:
+                  </label>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {DEFAULT_PRESET_GRADIENTS.map((p) => (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => {
+                          setEditIconUrl(generateSvgAppIcon(editingApp.name, p.colors));
+                        }}
+                        className="w-8 h-8 rounded-xl border-2 border-white dark:border-slate-700 shadow-sm transition-transform hover:scale-110"
+                        style={{ background: `linear-gradient(135deg, ${p.colors[0]}, ${p.colors[1]})` }}
+                        title={p.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingApp(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm flex items-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Simpan Gambar Baru</span>
                 </button>
               </div>
             </form>

@@ -1,6 +1,7 @@
 import { AppItem, SyncLog, GoogleConfig } from '../types';
 import { INITIAL_APPS } from '../data/initialApps';
 import { GOOGLE_CONFIG } from '../config/googleConfig';
+import { generateSvgAppIcon } from '../utils/iconGenerator';
 
 const STORAGE_KEY_APPS = 'nexus_playstore_apps_v2';
 const STORAGE_KEY_INSTALLED = 'nexus_playstore_installed_v2';
@@ -56,7 +57,22 @@ export const getStoredApps = (): AppItem[] => {
       localStorage.setItem(STORAGE_KEY_APPS, JSON.stringify([]));
       return [];
     }
-    return JSON.parse(raw);
+    const parsed: AppItem[] = JSON.parse(raw);
+    let changed = false;
+    const sanitized = parsed.map((app) => {
+      if (!app.iconUrl || app.iconUrl.trim() === '' || app.iconUrl.includes('broken')) {
+        changed = true;
+        return {
+          ...app,
+          iconUrl: generateSvgAppIcon(app.name)
+        };
+      }
+      return app;
+    });
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY_APPS, JSON.stringify(sanitized));
+    }
+    return sanitized;
   } catch (e) {
     console.error('Failed to load stored apps:', e);
     return [];
@@ -155,6 +171,7 @@ export async function syncToGoogleSheetAndDrive(app: AppItem): Promise<boolean> 
         fileType: app.fileType,
         sizeMb: app.sizeMb,
         developer: app.developer,
+        iconUrl: app.iconUrl,
         sha256: app.securityAudit.sha256Hash,
         downloadUrl: app.downloadUrl,
         timestamp: new Date().toISOString()

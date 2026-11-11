@@ -82,6 +82,15 @@ export default function App() {
     saveStoredApps(updated);
   };
 
+  const handleUpdateApp = (updatedApp: AppItem) => {
+    const updated = apps.map(a => a.id === updatedApp.id ? updatedApp : a);
+    setApps(updated);
+    saveStoredApps(updated);
+    if (selectedApp && selectedApp.id === updatedApp.id) {
+      setSelectedApp(updatedApp);
+    }
+  };
+
   const handleDeleteApp = (appId: string) => {
     const updated = apps.filter(a => a.id !== appId);
     setApps(updated);
@@ -164,6 +173,7 @@ export default function App() {
         <DeveloperConsole
           apps={apps}
           onPublishApp={handlePublishApp}
+          onUpdateApp={handleUpdateApp}
           onDeleteApp={handleDeleteApp}
           onSwitchToStore={() => setActiveMode('store')}
         />
