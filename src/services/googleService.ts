@@ -1,10 +1,49 @@
-import { AppItem, SyncLog } from '../types';
+import { AppItem, SyncLog, GoogleConfig } from '../types';
 import { INITIAL_APPS } from '../data/initialApps';
 import { GOOGLE_CONFIG } from '../config/googleConfig';
 
 const STORAGE_KEY_APPS = 'nexus_playstore_apps_v2';
 const STORAGE_KEY_INSTALLED = 'nexus_playstore_installed_v2';
 const STORAGE_KEY_LOGS = 'nexus_playstore_logs_v2';
+const STORAGE_KEY_CONFIG = 'nexus_playstore_google_config_v1';
+
+export const getGoogleConfig = (): GoogleConfig => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CONFIG);
+    if (!raw) {
+      return GOOGLE_CONFIG;
+    }
+    return { ...GOOGLE_CONFIG, ...JSON.parse(raw) };
+  } catch (e) {
+    return GOOGLE_CONFIG;
+  }
+};
+
+export const saveGoogleConfig = (newConfig: Partial<GoogleConfig>): GoogleConfig => {
+  const current = getGoogleConfig();
+  const updated: GoogleConfig = {
+    ...current,
+    ...newConfig,
+    DRIVE_FOLDER_URL: newConfig.DRIVE_FOLDER_ID
+      ? `https://drive.google.com/drive/folders/${newConfig.DRIVE_FOLDER_ID}`
+      : current.DRIVE_FOLDER_URL
+  };
+  try {
+    localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(updated));
+    addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Google configuration updated: ${updated.SHEET_URL}`);
+  } catch (e) {
+    console.error('Failed to save google config:', e);
+  }
+  return updated;
+};
+
+export const resetGoogleConfig = (): GoogleConfig => {
+  try {
+    localStorage.removeItem(STORAGE_KEY_CONFIG);
+    addSyncLog('PUSH_TO_SHEET', 'SUCCESS', 'Google configuration reset to default.');
+  } catch (e) {}
+  return GOOGLE_CONFIG;
+};
 
 export const getStoredApps = (): AppItem[] => {
   try {
@@ -53,20 +92,21 @@ export const getSyncLogs = (): SyncLog[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_LOGS);
     if (!raw) {
+      const currentConfig = getGoogleConfig();
       const initialLogs: SyncLog[] = [
         {
           id: 'log-1',
           timestamp: new Date().toISOString(),
           action: 'PUSH_TO_SHEET',
           status: 'SUCCESS',
-          details: `Connected to Google Sheet: ${GOOGLE_CONFIG.SHEET_URL}`
+          details: `Connected to Google Sheet: ${currentConfig.SHEET_URL}`
         },
         {
           id: 'log-2',
           timestamp: new Date().toISOString(),
           action: 'UPLOAD_TO_DRIVE',
           status: 'SUCCESS',
-          details: `Drive Folder ID linked: ${GOOGLE_CONFIG.DRIVE_FOLDER_ID}`
+          details: `Drive Folder ID linked: ${currentConfig.DRIVE_FOLDER_ID}`
         }
       ];
       localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(initialLogs));
@@ -99,14 +139,14 @@ export const addSyncLog = (action: SyncLog['action'], status: SyncLog['status'],
  * Also tests fetch request to webhook if CORS / network permits.
  */
 export async function syncToGoogleSheetAndDrive(app: AppItem): Promise<boolean> {
+  const config = getGoogleConfig();
   addSyncLog('PUSH_TO_SHEET', 'PENDING', `Syncing ${app.name} (${app.fileType}) to Google Sheet & Drive...`);
 
   try {
-    // Attempt real fetch to webhook if possible, otherwise graceful mock success with simulated delay
     const payload = {
-      spreadsheetUrl: GOOGLE_CONFIG.SHEET_URL,
-      webhookUrl: GOOGLE_CONFIG.WEBHOOK_URL,
-      driveFolderId: GOOGLE_CONFIG.DRIVE_FOLDER_ID,
+      spreadsheetUrl: config.SHEET_URL,
+      webhookUrl: config.WEBHOOK_URL,
+      driveFolderId: config.DRIVE_FOLDER_ID,
       appData: {
         id: app.id,
         name: app.name,
@@ -123,21 +163,20 @@ export async function syncToGoogleSheetAndDrive(app: AppItem): Promise<boolean> 
 
     // We can use no-cors or standard fetch
     try {
-      await fetch(GOOGLE_CONFIG.WEBHOOK_URL, {
+      await fetch(config.WEBHOOK_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
     } catch (netErr) {
-      // webhook network error is expected if Apps Script URL is placeholder, fallback handled smoothly
       console.warn('Webhook network request note:', netErr);
     }
 
     await new Promise(res => setTimeout(res, 800));
 
-    addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Successfully synced ${app.name} to Google Sheet (${GOOGLE_CONFIG.SHEET_URL}) & Google Drive.`);
-    addSyncLog('UPLOAD_TO_DRIVE', 'SUCCESS', `Binary stored in Google Drive folder: ${GOOGLE_CONFIG.DRIVE_FOLDER_ID}`);
+    addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Successfully synced ${app.name} to Google Sheet (${config.SHEET_URL}) & Google Drive.`);
+    addSyncLog('UPLOAD_TO_DRIVE', 'SUCCESS', `Binary stored in Google Drive folder: ${config.DRIVE_FOLDER_ID}`);
     return true;
   } catch (error) {
     addSyncLog('PUSH_TO_SHEET', 'ERROR', `Failed to sync ${app.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);

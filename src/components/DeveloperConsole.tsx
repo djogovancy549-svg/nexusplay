@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { AppItem, FileType, AppCategory } from '../types';
-import { Upload, Plus, Database, Cloud, ShieldCheck, Trash2, Edit, CheckCircle2, FileCode, BarChart3, UserCheck, Lock, Key, X, Cpu } from 'lucide-react';
-import { GOOGLE_CONFIG } from '../config/googleConfig';
-import { syncToGoogleSheetAndDrive } from '../services/googleService';
+import { Upload, Plus, Database, Cloud, ShieldCheck, Trash2, Edit, CheckCircle2, FileCode, BarChart3, UserCheck, Lock, Key, X, Cpu, Save, ExternalLink } from 'lucide-react';
+import { syncToGoogleSheetAndDrive, getGoogleConfig, saveGoogleConfig } from '../services/googleService';
 import { AiSecuritySentinel } from './AiSecuritySentinel';
 
 interface DeveloperConsoleProps {
@@ -32,6 +31,12 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
+
+  // Editable Google Config State for Owner
+  const [devSheetUrl, setDevSheetUrl] = useState(() => getGoogleConfig().SHEET_URL);
+  const [devWebhookUrl, setDevWebhookUrl] = useState(() => getGoogleConfig().WEBHOOK_URL);
+  const [devDriveFolderId, setDevDriveFolderId] = useState(() => getGoogleConfig().DRIVE_FOLDER_ID);
+  const [devConfigSaved, setDevConfigSaved] = useState(false);
 
   // Upload Form state
   const [appName, setAppName] = useState('');
@@ -136,7 +141,7 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
         minSdk: 26,
         targetSdk: 34
       },
-      downloadUrl: `${GOOGLE_CONFIG.DRIVE_FOLDER_URL}/${appName.replace(/\s+/g, '_')}_${version}.${fileType.toLowerCase()}`,
+      downloadUrl: `${getGoogleConfig().DRIVE_FOLDER_URL}/${appName.replace(/\s+/g, '_')}_${version}.${fileType.toLowerCase()}`,
       syncedToSheet: true,
       createdAt: new Date().toISOString().split('T')[0]
     };
@@ -447,37 +452,104 @@ export const DeveloperConsole: React.FC<DeveloperConsoleProps> = ({
 
       {/* Tab 3: Google Sheet & Drive Sync (Protected by PIN) */}
       {activeTab === 'syncLogs' && isSyncUnlocked && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Database className="w-5 h-5 text-emerald-600" />
-              <span>Google Sheet & Drive Integration Status (Owner Only)</span>
-            </h3>
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Database className="w-5 h-5 text-emerald-600" />
+                <span>Pengaturan Link Google Sheet & Drive (Khusus Pemilik)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Ubah atau sesuaikan URL database Google Sheet, Webhook, dan ID Google Drive sesuai kebutuhan Anda.
+              </p>
+            </div>
             <button
               onClick={() => setIsSyncUnlocked(false)}
-              className="text-xs text-rose-600 hover:underline"
+              className="text-xs text-rose-600 hover:underline px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-950 hover:bg-rose-50 dark:hover:bg-rose-950/40"
             >
-              Lock Again
+              Kunci Kembali
             </button>
           </div>
-          <p className="text-xs text-slate-500">
-            All developer APK/AAB uploads are synchronized with the embedded Google Sheet and Google Drive repository.
-          </p>
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-xs space-y-3 font-mono">
-            <div>
-              <span className="text-slate-500">Google Sheet URL:</span>
-              <div className="text-slate-800 dark:text-slate-200 truncate mt-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                {GOOGLE_CONFIG.SHEET_URL}
-              </div>
+          {devConfigSaved && (
+            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Pengaturan link Google berhasil disimpan! Semua upload berikutnya akan terarah ke link baru.</span>
             </div>
+          )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveGoogleConfig({
+                SHEET_URL: devSheetUrl.trim(),
+                WEBHOOK_URL: devWebhookUrl.trim(),
+                DRIVE_FOLDER_ID: devDriveFolderId.trim()
+              });
+              setDevConfigSaved(true);
+              setTimeout(() => setDevConfigSaved(false), 3000);
+            }}
+            className="space-y-4"
+          >
             <div>
-              <span className="text-slate-500">Google Drive Folder ID:</span>
-              <div className="text-slate-800 dark:text-slate-200 truncate mt-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                {GOOGLE_CONFIG.DRIVE_FOLDER_ID}
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Google Sheet URL:</label>
+                {devSheetUrl && (
+                  <a
+                    href={devSheetUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    <span>Buka Sheet</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
+              <input
+                type="url"
+                required
+                value={devSheetUrl}
+                onChange={(e) => setDevSheetUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-xs outline-none focus:border-blue-500"
+              />
             </div>
-          </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Google Apps Script Webhook URL:</label>
+              <input
+                type="url"
+                required
+                value={devWebhookUrl}
+                onChange={(e) => setDevWebhookUrl(e.target.value)}
+                placeholder="https://script.google.com/macros/s/.../exec"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-xs outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Google Drive Folder ID:</label>
+              <input
+                type="text"
+                required
+                value={devDriveFolderId}
+                onChange={(e) => setDevDriveFolderId(e.target.value)}
+                placeholder="Google Drive Folder ID"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-xs outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end pt-2">
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Simpan Pengaturan Link</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

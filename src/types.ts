@@ -58,3 +58,12 @@ export interface SyncLog {
   status: 'SUCCESS' | 'PENDING' | 'ERROR';
   details: string;
 }
+
+export interface GoogleConfig {
+  SHEET_URL: string;
+  SHEET_API_ENDPOINT: string;
+  WEBHOOK_URL: string;
+  DRIVE_FOLDER_ID: string;
+  DRIVE_FOLDER_URL: string;
+}
+

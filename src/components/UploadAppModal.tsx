@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Upload, FileCode, ShieldCheck, CheckCircle2, Cloud, Database } from 'lucide-react';
 import { AppItem, FileType, AppCategory } from '../types';
-import { GOOGLE_CONFIG } from '../config/googleConfig';
+import { getGoogleConfig } from '../services/googleService';
 
 interface UploadAppModalProps {
   onClose: () => void;
@@ -76,7 +76,7 @@ export const UploadAppModal: React.FC<UploadAppModalProps> = ({ onClose, onPubli
         minSdk: 26,
         targetSdk: 34
       },
-      downloadUrl: `${GOOGLE_CONFIG.DRIVE_FOLDER_URL}/${appName.replace(/\s+/g, '_')}_${version}.${fileType.toLowerCase()}`,
+      downloadUrl: `${getGoogleConfig().DRIVE_FOLDER_URL}/${appName.replace(/\s+/g, '_')}_${version}.${fileType.toLowerCase()}`,
       syncedToSheet: true,
       createdAt: new Date().toISOString().split('T')[0]
     };
