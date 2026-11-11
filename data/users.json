@@ -4,5 +4,11 @@
     "name": "Customer Official",
     "role": "customer",
     "registeredAt": "2026-11-11T00:00:00.000Z"
+  },
+  {
+    "email": "test.customer@gmail.com",
+    "name": "Test Customer",
+    "role": "customer",
+    "registeredAt": "2026-11-11T08:58:17.158Z"
   }
 ]

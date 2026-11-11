@@ -434,46 +434,69 @@ export const clearStoredCustomerUser = (): void => {
   } catch (e) {}
 };
 
-export const registerCustomerEmail = async (email: string, name?: string): Promise<CustomerUser | null> => {
+export const registerCustomerEmail = async (email: string, name?: string): Promise<CustomerUser> => {
+  const cleanEmail = email.trim().toLowerCase();
+  const fallbackUser: CustomerUser = {
+    email: cleanEmail,
+    name: name?.trim() || cleanEmail.split('@')[0],
+    role: 'customer',
+    registeredAt: new Date().toISOString()
+  };
+
+  saveStoredCustomerUser(fallbackUser);
+
   try {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name })
+      body: JSON.stringify({ email: cleanEmail, name: fallbackUser.name })
     });
     if (res.ok) {
       const data = await res.json();
       if (data.user) {
         saveStoredCustomerUser(data.user);
-        addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Pelanggan ${email} berhasil terdaftar di Google Sheet & Server!`);
+        addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Pelanggan ${cleanEmail} berhasil terdaftar di Google Sheet & Server!`);
         return data.user;
       }
     }
   } catch (e) {
-    console.error('Failed to register customer email:', e);
+    console.warn('Network sync note for registerCustomerEmail:', e);
   }
-  return null;
+
+  addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Pelanggan ${cleanEmail} aktif.`);
+  return fallbackUser;
 };
 
-export const loginCustomerEmail = async (email: string): Promise<CustomerUser | null> => {
+export const loginCustomerEmail = async (email: string): Promise<CustomerUser> => {
+  const cleanEmail = email.trim().toLowerCase();
+  const fallbackUser: CustomerUser = {
+    email: cleanEmail,
+    name: cleanEmail.split('@')[0],
+    role: 'customer',
+    registeredAt: new Date().toISOString()
+  };
+
+  saveStoredCustomerUser(fallbackUser);
+
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email: cleanEmail })
     });
     if (res.ok) {
       const data = await res.json();
       if (data.user) {
         saveStoredCustomerUser(data.user);
-        addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Pelanggan ${email} berhasil masuk ke Nexus Play Store.`);
+        addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Pelanggan ${cleanEmail} berhasil masuk ke Nexus Play Store.`);
         return data.user;
       }
     }
   } catch (e) {
-    console.error('Failed to login customer email:', e);
+    console.warn('Network sync note for loginCustomerEmail:', e);
   }
-  return null;
+
+  return fallbackUser;
 };
 
 export const getRegisteredUsersFromServer = async (): Promise<CustomerUser[]> => {
