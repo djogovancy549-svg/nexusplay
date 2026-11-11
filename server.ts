@@ -63,6 +63,47 @@ function saveServerApps(apps: any[]): void {
   }
 }
 
+/**
+ * Server-side bridge to fetch remote Webhook apps (e.g. https://nexusplay.cvebi.workers.dev/).
+ * Node.js runs server-side, bypassing browser CORS restrictions completely.
+ */
+async function syncRemoteAppsServerSide(): Promise<any[]> {
+  const defaultWebhookUrl = 'https://nexusplay.cvebi.workers.dev/';
+  try {
+    const response = await fetch(defaultWebhookUrl, { signal: AbortSignal.timeout(3000) });
+    if (response.ok) {
+      const data = await response.json();
+      const rawList = Array.isArray(data) ? data : (data.apps || data.data || []);
+      if (Array.isArray(rawList) && rawList.length > 0) {
+        return rawList.map((item: any, idx: number) => ({
+          id: item.id || `remote-app-${idx}`,
+          name: item.name || item.Nama || 'External App',
+          packageName: item.packageName || item.PackageName || `com.nexus.app.${idx}`,
+          developer: item.developer || item.Developer || 'Nexus Studio',
+          category: item.category || 'Productivity',
+          fileType: (item.fileType || item.Format || 'APK').toUpperCase(),
+          version: item.version || item.Versi || '1.0.0',
+          versionCode: item.versionCode || 1,
+          sizeMb: parseFloat(item.sizeMb || item.Ukuran || '25'),
+          downloads: item.downloads || '100+',
+          rating: item.rating || 5.0,
+          reviewsCount: item.reviewsCount || 0,
+          iconUrl: item.iconUrl || item.Gambar || '',
+          bannerUrl: item.bannerUrl || item.iconUrl || '',
+          description: item.description || item.Deskripsi || 'Aplikasi resmi dipublikasi via Webhook.',
+          whatsNew: item.whatsNew || 'Publikasi perdana.',
+          downloadUrl: item.downloadUrl || item.Link || '#',
+          syncedToSheet: true,
+          createdAt: item.timestamp || new Date().toISOString()
+        }));
+      }
+    }
+  } catch (err) {
+    // Webhook offline or timeout, ignore gracefully
+  }
+  return [];
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '50mb' }));
@@ -84,9 +125,25 @@ async function startServer() {
   // ==========================================
   // SHARED PUBLIC CATALOG API (All Devices / Users / Emails)
   // ==========================================
-  app.get('/api/apps', (req, res) => {
+  app.get('/api/apps', async (req, res) => {
     try {
-      const apps = loadServerApps();
+      let apps = loadServerApps();
+      
+      // Server-side remote sync (bypasses browser CORS completely)
+      const remoteApps = await syncRemoteAppsServerSide();
+      if (remoteApps.length > 0) {
+        let updated = false;
+        remoteApps.forEach(remote => {
+          if (!apps.some(a => a.id === remote.id || a.packageName === remote.packageName)) {
+            apps.push(remote);
+            updated = true;
+          }
+        });
+        if (updated) {
+          saveServerApps(apps);
+        }
+      }
+
       res.json({ success: true, count: apps.length, apps });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

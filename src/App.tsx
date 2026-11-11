@@ -93,7 +93,7 @@ export default function App() {
   // Fetch shared apps from server on startup (Available to all users, devices, and emails)
   useEffect(() => {
     fetchPublicAppsFromServer().then((sharedApps) => {
-      if (sharedApps && sharedApps.length > 0) {
+      if (sharedApps && Array.isArray(sharedApps) && sharedApps.length > 0) {
         setApps(sharedApps);
       }
     });
