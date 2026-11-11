@@ -1,5 +1,5 @@
 import React from 'react';
-import { Store, ShieldCheck, Cloud, Upload, Package, Search, Sun, Moon, UserCheck } from 'lucide-react';
+import { Store, ShieldCheck, Cloud, Upload, Package, Search, Sun, Moon, UserCheck, Lock } from 'lucide-react';
 
 interface NavbarProps {
   searchQuery: string;
@@ -61,10 +61,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onOpenSyncPanel}
             className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 rounded-lg border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
-            title="Google Sheet & Drive Connected"
+            title="Google Sheet & Drive Settings (Protected by Owner PIN)"
           >
             <Cloud className="w-3.5 h-3.5" />
             <span>Sheet & Drive Synced</span>
+            <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400 ml-0.5" />
           </button>
 
           {activeMode === 'store' ? (
