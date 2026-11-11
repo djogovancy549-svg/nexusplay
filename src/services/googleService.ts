@@ -7,6 +7,40 @@ const STORAGE_KEY_APPS = 'nexus_playstore_apps_v2';
 const STORAGE_KEY_INSTALLED = 'nexus_playstore_installed_v2';
 const STORAGE_KEY_LOGS = 'nexus_playstore_logs_v2';
 const STORAGE_KEY_CONFIG = 'nexus_playstore_google_config_v1';
+const STORAGE_KEY_DEV_PIN = 'nexus_playstore_dev_pin_v1';
+
+export const DEFAULT_DEV_PIN = "developer#$%//f26@nnc^^ebi";
+
+export const getDeveloperPin = (): string => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DEV_PIN);
+    if (!raw || !raw.trim()) {
+      return DEFAULT_DEV_PIN;
+    }
+    return raw.trim();
+  } catch (e) {
+    return DEFAULT_DEV_PIN;
+  }
+};
+
+export const saveDeveloperPin = (newPin: string): string => {
+  const clean = newPin.trim();
+  try {
+    localStorage.setItem(STORAGE_KEY_DEV_PIN, clean);
+    addSyncLog('SECURITY_SCAN', 'SUCCESS', `Developer Console PIN updated successfully.`);
+  } catch (e) {
+    console.error('Failed to save developer PIN:', e);
+  }
+  return clean;
+};
+
+export const resetDeveloperPin = (): string => {
+  try {
+    localStorage.removeItem(STORAGE_KEY_DEV_PIN);
+    addSyncLog('SECURITY_SCAN', 'SUCCESS', `Developer Console PIN reset to default.`);
+  } catch (e) {}
+  return DEFAULT_DEV_PIN;
+};
 
 export const getGoogleConfig = (): GoogleConfig => {
   try {

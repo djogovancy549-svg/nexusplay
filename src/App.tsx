@@ -24,11 +24,11 @@ import {
   fetchPublicAppsFromServer,
   publishAppToServer,
   updateAppOnServer,
-  deleteAppFromServer
+  deleteAppFromServer,
+  getDeveloperPin
 } from './services/googleService';
 import { Store, Database, ShieldAlert, ShieldCheck, Lock, X, UserCheck } from 'lucide-react';
 
-const DEVELOPER_CONSOLE_PIN = "developer#$%//f26@nnc^^ebi";
 const OWNER_PIN = "fnc@liO#26&*//?!x@gdj^^%+";
 
 export default function App() {
@@ -174,7 +174,7 @@ export default function App() {
 
   const handleVerifyDevPin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (devPinInput === DEVELOPER_CONSOLE_PIN) {
+    if (devPinInput === getDeveloperPin()) {
       setIsDevUnlocked(true);
       setShowDevPinModal(false);
       setActiveMode('developer');
