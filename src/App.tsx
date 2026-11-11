@@ -22,6 +22,7 @@ import {
   saveInstalledAppIds,
   syncToGoogleSheetAndDrive,
   fetchPublicAppsFromServer,
+  fetchServerGoogleConfig,
   publishAppToServer,
   updateAppOnServer,
   deleteAppFromServer,
@@ -90,8 +91,9 @@ export default function App() {
     };
   }, [darkMode]);
 
-  // Fetch shared apps from server on startup (Available to all users, devices, and emails)
+  // Fetch shared apps & shared server config on startup (Available to all users, devices, and emails)
   useEffect(() => {
+    fetchServerGoogleConfig();
     fetchPublicAppsFromServer().then((sharedApps) => {
       if (sharedApps && Array.isArray(sharedApps) && sharedApps.length > 0) {
         setApps(sharedApps);

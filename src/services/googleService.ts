@@ -42,16 +42,33 @@ export const resetDeveloperPin = (): string => {
   return DEFAULT_DEV_PIN;
 };
 
+let inMemoryConfig: GoogleConfig = GOOGLE_CONFIG;
+
 export const getGoogleConfig = (): GoogleConfig => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CONFIG);
-    if (!raw) {
-      return GOOGLE_CONFIG;
+    if (raw) {
+      return { ...GOOGLE_CONFIG, ...JSON.parse(raw) };
     }
-    return { ...GOOGLE_CONFIG, ...JSON.parse(raw) };
+  } catch (e) {}
+  return inMemoryConfig || GOOGLE_CONFIG;
+};
+
+export const fetchServerGoogleConfig = async (): Promise<GoogleConfig> => {
+  try {
+    const res = await fetch('/api/config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.config) {
+        inMemoryConfig = { ...GOOGLE_CONFIG, ...data.config };
+        localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(inMemoryConfig));
+        return inMemoryConfig;
+      }
+    }
   } catch (e) {
-    return GOOGLE_CONFIG;
+    console.warn('Config fetch note:', e);
   }
+  return getGoogleConfig();
 };
 
 export const saveGoogleConfig = (newConfig: Partial<GoogleConfig>): GoogleConfig => {
@@ -63,9 +80,16 @@ export const saveGoogleConfig = (newConfig: Partial<GoogleConfig>): GoogleConfig
       ? `https://drive.google.com/drive/folders/${newConfig.DRIVE_FOLDER_ID}`
       : current.DRIVE_FOLDER_URL
   };
+  inMemoryConfig = updated;
   try {
     localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(updated));
-    addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Google configuration updated: ${updated.SHEET_URL}`);
+    // Persist to server so ALL devices and emails receive the update
+    fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    }).catch(err => console.error('Failed to sync config to server:', err));
+    addSyncLog('PUSH_TO_SHEET', 'SUCCESS', `Google configuration updated for all devices: ${updated.SHEET_URL}`);
   } catch (e) {
     console.error('Failed to save google config:', e);
   }
@@ -73,9 +97,15 @@ export const saveGoogleConfig = (newConfig: Partial<GoogleConfig>): GoogleConfig
 };
 
 export const resetGoogleConfig = (): GoogleConfig => {
+  inMemoryConfig = GOOGLE_CONFIG;
   try {
     localStorage.removeItem(STORAGE_KEY_CONFIG);
-    addSyncLog('PUSH_TO_SHEET', 'SUCCESS', 'Google configuration reset to default.');
+    fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(GOOGLE_CONFIG)
+    }).catch(err => console.error('Failed to reset config on server:', err));
+    addSyncLog('PUSH_TO_SHEET', 'SUCCESS', 'Google configuration reset to default for all devices.');
   } catch (e) {}
   return GOOGLE_CONFIG;
 };

@@ -7,7 +7,17 @@ import { createServer as createViteServer } from 'vite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APPS_FILE = path.join(__dirname, 'data', 'apps.json');
+const CONFIG_FILE = path.join(__dirname, 'data', 'google_config.json');
 const UPLOADS_DIR = path.join(__dirname, 'uploads', 'icons');
+
+// Default Google Configuration embedded directly in code
+const DEFAULT_GOOGLE_CONFIG = {
+  SHEET_URL: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=0",
+  SHEET_API_ENDPOINT: "https://sheets.googleapis.com/v4/spreadsheets/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/values/Apps!A1:Z100",
+  WEBHOOK_URL: "https://nexusplay.cvebi.workers.dev/",
+  DRIVE_FOLDER_ID: "1Drive_NexusPlayStore_APK_AAB_Repository_XYZ987",
+  DRIVE_FOLDER_URL: "https://drive.google.com/drive/folders/1Drive_NexusPlayStore_APK_AAB_Repository_XYZ987",
+};
 
 // Ensure data & uploads folders exist
 if (!fs.existsSync(path.join(__dirname, 'data'))) {
@@ -15,6 +25,27 @@ if (!fs.existsSync(path.join(__dirname, 'data'))) {
 }
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+function loadServerConfig(): any {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const content = fs.readFileSync(CONFIG_FILE, 'utf-8');
+      const parsed = JSON.parse(content || '{}');
+      return { ...DEFAULT_GOOGLE_CONFIG, ...parsed };
+    }
+  } catch (err) {
+    console.error('Failed to read server google_config.json:', err);
+  }
+  return DEFAULT_GOOGLE_CONFIG;
+}
+
+function saveServerConfig(config: any): void {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to write server google_config.json:', err);
+  }
 }
 
 /**
@@ -68,9 +99,10 @@ function saveServerApps(apps: any[]): void {
  * Node.js runs server-side, bypassing browser CORS restrictions completely.
  */
 async function syncRemoteAppsServerSide(): Promise<any[]> {
-  const defaultWebhookUrl = 'https://nexusplay.cvebi.workers.dev/';
+  const currentConfig = loadServerConfig();
+  const targetWebhookUrl = currentConfig.WEBHOOK_URL || 'https://nexusplay.cvebi.workers.dev/';
   try {
-    const response = await fetch(defaultWebhookUrl, { signal: AbortSignal.timeout(3000) });
+    const response = await fetch(targetWebhookUrl, { signal: AbortSignal.timeout(3000) });
     if (response.ok) {
       const data = await response.json();
       const rawList = Array.isArray(data) ? data : (data.apps || data.data || []);
@@ -119,6 +151,36 @@ async function startServer() {
       headers: {
         'User-Agent': 'aistudio-build',
       }
+    }
+  });
+
+  // ==========================================
+  // SHARED GOOGLE CONFIGURATION ENDPOINTS (Applies to all devices & emails)
+  // ==========================================
+  app.get('/api/config', (req, res) => {
+    try {
+      const config = loadServerConfig();
+      res.json({ success: true, config });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/config', (req, res) => {
+    try {
+      const newConfig = req.body;
+      const current = loadServerConfig();
+      const updated = {
+        ...current,
+        ...newConfig,
+        DRIVE_FOLDER_URL: newConfig.DRIVE_FOLDER_ID
+          ? `https://drive.google.com/drive/folders/${newConfig.DRIVE_FOLDER_ID}`
+          : current.DRIVE_FOLDER_URL
+      };
+      saveServerConfig(updated);
+      res.json({ success: true, message: 'Google configuration updated for all users.', config: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
