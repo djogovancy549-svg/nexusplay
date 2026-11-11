@@ -15,7 +15,7 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads', 'icons');
 const DEFAULT_GOOGLE_CONFIG = {
   SHEET_URL: "https://docs.google.com/spreadsheets/d/1x9vPsR3_VdhhwVV8SQJ4yz6PRhqNro5GjKX0D8nBQfQ",
   SHEET_API_ENDPOINT: "https://docs.google.com/spreadsheets/d/1x9vPsR3_VdhhwVV8SQJ4yz6PRhqNro5GjKX0D8nBQfQ",
-  WEBHOOK_URL: "https://script.google.com/macros/s/AKfycby2SY-GAoLvegKI4wCP5Hkefkt1rRtgRa_TEsleHnRl_IhkxZ1XcD5P5Lsb5gxK0ud6DA/exec",
+  WEBHOOK_URL: "https://script.google.com/macros/s/AKfycbx1wBZ44OerWs0t0UVc3JM6hP2V1-Jl-lhcCHIM54B-75r0VoKcczC7LUaJNUriXI_dxQ/exec",
   DRIVE_FOLDER_ID: "173h7jlkKPHUFg91p5ly8NjsNdwnLmc-3",
   DRIVE_FOLDER_URL: "https://drive.google.com/drive/folders/173h7jlkKPHUFg91p5ly8NjsNdwnLmc-3",
 };
